@@ -1,0 +1,25 @@
+# *.ipynb
+.vscode
+.ipynb_checkpoints/
+.dvcremote
+.cache
+forgit
+fordvc
+tmp/
+
+# ignore all directories and files starting with '__' (double underscore)
+__*
+logs/
+data/
+runs/
+checkpoint*/
+models/*
+classifier_model/*
+language_model/*
+pretrained/*
+logs/*
+models/
+results/
+wandb
+log
+wnut17train.conll

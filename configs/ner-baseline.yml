@@ -1,0 +1,61 @@
+# This file is used as a baseline
+# These are all the possible arguments to configure the trainer
+# Please changes the ones you want to change
+# and delete all options you do not want to call explicity
+
+# The type of the task you are training
+task_type: "NER"
+# GPU or CPU
+device: "auto"
+# an identifyable name (suffix)
+experiment_name: None
+experiment_name_suffix: "test"
+# folder and file data is stored in
+data_folder: "./data"
+data_file: "dataset_v007_postkorb_Widerruf.json"
+# Random Seed to generate reproducable random things
+random_seed: 42
+
+# The architecture of the model you're using
+architecture: "distilbert"
+# Resume training
+resume_from_checkpoint: False
+# the checkpoint model to work from
+checkpoint_model: "distilbert-base-uncased"
+# the tokenizer checkpoint to work from
+checkpoint_tokenizer: "distilbert-base-uncased"
+# Number of Workers
+workers: 1
+# load the best model after training
+load_best: True
+# is a higher value better in the metric you use?
+greater_better: True
+# metric you want to use
+metric_used: "matthews_correlation"
+
+batch_size: 40
+# Learning Rate
+lr_rate: 1e-05
+weight_decay: 5e-1
+# Warm up for the learning rate
+warm_up: 0.2
+lr_scheduler_type: "linear"
+epochs: 10
+oversampling: 0.3
+# Number of layers in the pretrained model to not train
+freeze_layer: 3
+label_smoothing: 0.0
+# Custom Trainer
+custom_trainer: "TrainerDiceLoss"
+# Split Ratio
+split_ratio_train: 0.9
+
+# Should there be a tensorboard log?
+logging: True
+logging_strategy: "steps"
+logging_steps: 100
+evaluation_strategy: "steps"
+evaluation_steps: 100
+save_strategy: "steps"
+save_steps: 1000
+save_limits: 5

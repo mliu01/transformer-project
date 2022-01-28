@@ -41,11 +41,11 @@ def compute_metrics(eval_pred: Tuple[np.ndarray, np.ndarray]) -> Dict[str, float
         matthews_correlation.compute(
             predictions=predictions, references=labels)
     )
-    metrics.update(
-        class_scores.compute(
-            predictions=predictions, references=labels, label_names=target_names
-        )
-    )
+   #metrics.update(
+   #    class_scores.compute(
+   #        predictions=predictions, references=labels, label_names=target_names
+   #    )
+   #)
     return metrics
 
 

@@ -107,20 +107,24 @@ assert (
 
 # %%
 tokenizer = AutoTokenizer.from_pretrained(
-    args_dict["checkpoint_tokenizer"], use_fast=True, padding="max_length", batched=True, num_proc=args_dict["tokenizer_num_processes"]
+    args_dict["checkpoint_tokenizer"], use_fast=True, batched=True, num_proc=args_dict["tokenizer_num_processes"],
+    model_max_length=512
     )
 
 # %%
-dataset_train = dataset_train.map(lambda x: tokenizer(x["text"]))
-dataset_test = dataset_test.map(lambda x: tokenizer(x["text"]))
+dataset_train = dataset_train.map(lambda x: tokenizer(x["text"], truncation=True, padding='max_length'))
+dataset_test = dataset_test.map(lambda x: tokenizer(x["text"], truncation=True, padding='max_length'))
+
+# %%
+len(dataset_train[0]['input_ids'])
 
 # %%
 #dataset_train = dataset_train.map(
-#    lambda x: tokenizer(x["text"], truncation=True),
+#    lambda x: model_obj.tokenizer(x["text"], truncation=True),
 #    batched=True,
 #    num_proc=args_dict["tokenizer_num_processes"],
 #)
-#dataset_train
+#
 #dataset_test = dataset_test.map(
 #    lambda x: model_obj.tokenizer(x["text"], truncation=True),
 #    batched=True,
@@ -257,3 +261,7 @@ print("done... saving model")
 trainer.save_model(f"models/{filename}")
 model_obj.model.save_pretrained(f"pretrained/{filename}")
 model_obj.tokenizer.save_pretrained(f"pretrained/{filename}")
+
+# %%
+
+# %%

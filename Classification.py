@@ -16,6 +16,10 @@
 # %% [markdown]
 # ## Imports
 # %%
+# %load_ext autoreload
+# %autoreload 2
+
+# %%
 from pathlib import Path
 import numpy as np
 import math
@@ -27,6 +31,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datasets import load_dataset, DatasetDict, Dataset
 import transformers
 from transformers import (
+    AutoTokenizer,
     TrainingArguments,
     Trainer,
     set_seed,
@@ -75,13 +80,103 @@ filename, filepath = save_config(args_dict)
 # %%
 writer = SummaryWriter(f"{filepath}/{filename}")
 
+
+# %% [markdown]
+# ## Loading Dataset <a class="anchor" id="dataset"></a>
+# ### TODO: Refactor this properly
+# %%
+json_files = str(Path(args_dict["data_folder"]).joinpath(args_dict["data_file"]))
+# %%
+json_files_train = [json_files.replace(".json", "") + "_train.json"]
+json_files_test = [json_files.replace(".json", "") + "_test.json"]
+
+dataset_train = load_dataset(
+    "json", data_files=json_files_train, block_size=block_size_10MB
+)["train"]
+dataset_test = load_dataset(
+    "json", data_files=json_files_test, block_size=block_size_10MB
+)["train"]
+
+dataset_train = dataset_train.class_encode_column("label")
+dataset_test = dataset_test.class_encode_column("label")
+
+assert (
+    dataset_train.features["label"].names == dataset_test.features["label"].names
+), "Something went wrong, target_names of train and test should be the same"
+
+
+# %%
+tokenizer = AutoTokenizer.from_pretrained(
+    args_dict["checkpoint_tokenizer"], use_fast=True, padding="max_length", batched=True, num_proc=args_dict["tokenizer_num_processes"]
+    )
+
+# %%
+dataset_train = dataset_train.map(lambda x: tokenizer(x["text"]))
+dataset_test = dataset_test.map(lambda x: tokenizer(x["text"]))
+
+# %%
+#dataset_train = dataset_train.map(
+#    lambda x: tokenizer(x["text"], truncation=True),
+#    batched=True,
+#    num_proc=args_dict["tokenizer_num_processes"],
+#)
+#dataset_train
+#dataset_test = dataset_test.map(
+#    lambda x: model_obj.tokenizer(x["text"], truncation=True),
+#    batched=True,
+#    num_proc=args_dict["tokenizer_num_processes"],
+#)
+
+# %%
+num_labels = dataset_train.features["label"].num_classes
+
+# %%
+# use shuffle to make sure the order of samples is randomized (deterministically)
+dataset_train = dataset_train.shuffle(seed=args_dict["random_seed"])
+ds_train_testvalid = dataset_train.train_test_split(
+    test_size=(1 - args_dict["split_ratio_train"])
+)
+
+dataset = DatasetDict(
+    {
+        "train": ds_train_testvalid["train"],
+        "valid": ds_train_testvalid["test"],
+        "test": dataset_test,
+    }
+)
+
+target_names = dataset["test"].features["label"].names
+
+if args_dict["oversampling"]:
+    df_train = dataset["train"].to_pandas()
+    min_samples = math.ceil(len(df_train) * args_dict["oversampling"])
+    count_dict = dict(df_train["label"].value_counts())
+    count_dict = {k: v for k, v in count_dict.items() if v < min_samples}
+
+    over_samples = []
+    for label_id, n_occurance in count_dict.items():
+        class_samples = df_train[df_train["label"] == label_id]
+        additional_samples = class_samples.sample(
+            n=(min_samples - len(class_samples)), replace=True
+        )
+        over_samples.append(additional_samples)
+        print(
+            f"\nAdding {len(additional_samples)} samples for class {target_names[label_id]}"
+        )
+
+    new_train = pd.concat([df_train, *over_samples])
+    dataset["train"] = Dataset.from_pandas(new_train)
+
+
+dataset["train"] = dataset["train"].shuffle(seed=args_dict["random_seed"])
+
 # %% [markdown]
 # ## Model Definition <a class="anchor" id="model"></a>
 
 # %%
 # Model class definition was moved to utils for easier mentainance across notebooks
 model_obj = BERT(
-    args_dict, num_labels=num_labels, model_arc="roberta", task="classification"
+    args_dict, num_labels=num_labels
 )
 
 # %%
@@ -117,85 +212,6 @@ training_args = TrainingArguments(
     remove_unused_columns=True,
     dataloader_drop_last=args_dict["load_best"],
 )
-
-# %% [markdown]
-# ## Loading Dataset <a class="anchor" id="dataset"></a>
-# ### TODO: Refactor this properly
-# %%
-json_files = args_dict["data_folder"].joinpath(args_dict["data_file"])
-# %%
-json_files_train = [file.replace(".json", "") + "_train.json" for file in json_files]
-json_files_test = [file.replace(".json", "") + "_test.json" for file in json_files]
-
-dataset_train = load_dataset(
-    "json", data_files=json_files_train, block_size=block_size_10MB
-)["train"]
-dataset_test = load_dataset(
-    "json", data_files=json_files_test, block_size=block_size_10MB
-)["train"]
-
-dataset_train = dataset_train.class_encode_column("label")
-dataset_test = dataset_test.class_encode_column("label")
-
-assert (
-    dataset_train.features["label"].names == dataset_test.features["label"].names
-), "Something went wrong, target_names of train and test should be the same"
-
-dataset_train = dataset_train.map(
-    lambda x: model_obj.tokenizer(x["text"], truncation=True),
-    batched=True,
-    num_proc=args_dict["tokenizer_num_processes"],
-)
-
-dataset_test = dataset_test.map(
-    lambda x: model_obj.tokenizer(x["text"], truncation=True),
-    batched=True,
-    num_proc=args_dict["tokenizer_num_processes"],
-)
-
-# %%
-num_labels = dataset_train.features["label"].num_classes
-
-# %%
-# use shuffle to make sure the order of samples is randomized (deterministically)
-dataset_train = dataset_train.shuffle(seed=args_dict["random_seed"])
-ds_train_testvalid = dataset_train.train_test_split(
-    test_size=(1 - args_dict["split_ratio_train"])
-)
-
-dataset = DatasetDict(
-    {
-        "train": ds_train_testvalid["train"],
-        "valid": ds_train_testvalid["test"],
-        "test": dataset_test,
-    }
-)
-
-target_names = dataset["test"].features["label"].names
-
-if args.dict["oversampling"]:
-    df_train = dataset["train"].to_pandas()
-    min_samples = math.ceil(len(df_train) * args_dict["oversampling"])
-    count_dict = dict(df_train["label"].value_counts())
-    count_dict = {k: v for k, v in count_dict.items() if v < min_samples}
-
-    over_samples = []
-    for label_id, n_occurance in count_dict.items():
-        class_samples = df_train[df_train["label"] == label_id]
-        additional_samples = class_samples.sample(
-            n=(min_samples - len(class_samples)), replace=True
-        )
-        over_samples.append(additional_samples)
-        print(
-            f"\nAdding {len(additional_samples)} samples for class {target_names[label_id]}"
-        )
-
-    new_train = pd.concat([df_train, *over_samples])
-    dataset["train"] = Dataset.from_pandas(new_train)
-
-
-dataset["train"] = dataset["train"].shuffle(seed=args_dict["shuffle_seed"])
-
 
 # %% [markdown]
 # ## Train Model <a class="anchor" id="Train"></a>

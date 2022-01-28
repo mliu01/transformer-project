@@ -2,6 +2,8 @@
 from json import encoder
 from pathlib import Path
 import json
+import torch
+from typing import List, Set, Dict, Tuple, Optional
 
 
 def prep_conll_file(inputfile: str, outputfile: str):
@@ -36,3 +38,20 @@ def load_data(filename: str):
     if start < end:
         samples.append(lines[start:end])
     return samples
+
+class NER_Dataset(torch.utils.data.Dataset):
+    """
+    Make our Dataset a custom pytorch dataset for easier feed to the network
+    """
+
+    def __init__(self, encodings: Dict[str, List[List[int]]], labels: List[List[int]]):
+        self.encodings = encodings
+        self.labels = labels
+
+    def __getitem__(self, idx: int) -> torch.tensor:
+        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+        item["labels"] = torch.tensor(self.labels[idx])
+        return item
+
+    def __len__(self) -> int:
+        return len(self.labels)

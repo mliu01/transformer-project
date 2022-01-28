@@ -12,7 +12,7 @@ experiment_name: None
 experiment_name_suffix: "test"
 # folder and file data is stored in
 data_folder: "./data"
-data_file: "dataset_v007_postkorb_Widerruf.json"
+data_file: "blurbs.json"
 # Random Seed to generate reproducable random things
 random_seed: 42
 
@@ -40,10 +40,10 @@ batch_size: 40
 lr_rate: 1e-05
 weight_decay: 5e-1
 # Warm up for the learning rate
-warm_up: 1/5
+warm_up: 0.2
 lr_scheduler_type: "linear"
 epochs: 10
-oversampling: 0.3
+oversampling: 0
 # Number of layers in the pretrained model to not train
 freeze_layer: 6
 label_smoothing: 0.0

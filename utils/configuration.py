@@ -272,7 +272,9 @@ def parse_arguments():
     print(args)
 
     if args.config:
-        data = yaml.load(args.config, Loader=yaml.FullLoader)
+        data = yaml.load(
+            args.config, Loader=yaml.FullLoader
+        )  # Instead of setting every parameter by --<param> when running the script, we can define it all in one yml and make hotfixes with --<param>
         arg_dict = args.__dict__
         for key, value in data.items():
 
@@ -285,7 +287,9 @@ def parse_arguments():
 
     # args.learning_rate = float(args.learning_rate)
 
-    if args.device == "cuda" or "auto" and torch.cuda.is_available():
+    if (
+        args.device == "cuda" or "auto" and torch.cuda.is_available()
+    ):  # Setting up everything needed to run the model on the GPU if possible
 
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
@@ -308,14 +312,18 @@ def save_config(config: dict) -> Tuple[str, str]:
     p = Path("log/")
     # print(config)
     p = p.joinpath(f"{config['task_type']}")
-    p = p.joinpath(f"{config['architecture']}")
+    p = p.joinpath(
+        f"{config['architecture']}"
+    )  # After this the file structure looks e.g. like this ./log/NER/distilBERT/..
     p.mkdir(parents=True, exist_ok=True)
 
     filename = file_naming(p, config)
     filepath = p / filename
 
     with open(f"{str(filepath)}.yml", "w", encoding="utf-8") as f:
-        yaml.dump(config, f, indent=4)
+        yaml.dump(
+            config, f, indent=4
+        )  # We dump the currently used Hyperparameters as yml with a version number in the created/accessed folder
 
     return filename, filepath
 
@@ -348,6 +356,7 @@ def file_naming(path: Path, config: dict) -> str:
         filename += "001"
 
     # This filename does not include the file ending to generally use it for all files corresponding to this experiment
+    # Example Filenames: "No_Pretraining_V002" (for a model with no pretrained weights) or "E10_B40_LR1e-05_V003" (for a model with no specified name)
     return f"{filename}"
 
 
@@ -362,7 +371,8 @@ def yaml_dump_for_notebook(filepath="configs/baseline.yml"):
 def isnotebook():
     """
     a simple function to quickly check if something is running in a notebook
-    Important for example for the use of argparse
+    
+    This is usefull to run the repository as a notebook (just dumping the yml in a dict) as well as a script (with the argparser)
     """
     try:
         shell = get_ipython().__class__.__name__

@@ -35,6 +35,7 @@ from transformers import (
     TrainingArguments,
     Trainer,
     set_seed,
+    DataCollatorWithPadding
 )
 from transformers.utils import check_min_version
 import yaml
@@ -91,10 +92,10 @@ json_files_train = [json_files.replace(".json", "") + "_train.json"]
 json_files_test = [json_files.replace(".json", "") + "_test.json"]
 
 dataset_train = load_dataset(
-    "json", data_files=json_files_train, block_size=block_size_10MB
+    "json", data_files=json_files_train, chunksize=block_size_10MB
 )["train"]
 dataset_test = load_dataset(
-    "json", data_files=json_files_test, block_size=block_size_10MB
+    "json", data_files=json_files_test, chunksize=block_size_10MB
 )["train"]
 
 dataset_train = dataset_train.class_encode_column("label")
@@ -107,29 +108,26 @@ assert (
 
 # %%
 tokenizer = AutoTokenizer.from_pretrained(
-    args_dict["checkpoint_tokenizer"], use_fast=True, batched=True, num_proc=args_dict["tokenizer_num_processes"],
-    model_max_length=512
+    args_dict["checkpoint_tokenizer"], use_fast=True, model_max_length=512
     )
 
 # %%
-dataset_train = dataset_train.map(lambda x: tokenizer(x["text"], truncation=True, padding='max_length'))
-dataset_test = dataset_test.map(lambda x: tokenizer(x["text"], truncation=True, padding='max_length'))
+dataset_train = dataset_train.map(
+    lambda x: tokenizer(x['text'], truncation=True), 
+    batched=True
+    #num_proc=args_dict["tokenizer_num_processes"]
+)
+
+dataset_test = dataset_test.map(
+    lambda x: tokenizer(x['text'], truncation=True), 
+    batched=True
+    #num_proc=args_dict["tokenizer_num_processes"]
+)
+
+data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
 # %%
-len(dataset_train[0]['input_ids'])
-
-# %%
-#dataset_train = dataset_train.map(
-#    lambda x: model_obj.tokenizer(x["text"], truncation=True),
-#    batched=True,
-#    num_proc=args_dict["tokenizer_num_processes"],
-#)
-#
-#dataset_test = dataset_test.map(
-#    lambda x: model_obj.tokenizer(x["text"], truncation=True),
-#    batched=True,
-#    num_proc=args_dict["tokenizer_num_processes"],
-#)
+#len(dataset_train[0]['input_ids'])
 
 # %%
 num_labels = dataset_train.features["label"].num_classes
@@ -145,7 +143,7 @@ dataset = DatasetDict(
     {
         "train": ds_train_testvalid["train"],
         "valid": ds_train_testvalid["test"],
-        "test": dataset_test,
+        "test": dataset_test
     }
 )
 
@@ -214,7 +212,7 @@ training_args = TrainingArguments(
     dataloader_num_workers=args_dict["workers"],
     disable_tqdm=False,
     remove_unused_columns=True,
-    dataloader_drop_last=args_dict["load_best"],
+    dataloader_drop_last=args_dict["load_best"]
 )
 
 # %% [markdown]
@@ -227,6 +225,7 @@ trainer = trainer_class(
     eval_dataset=dataset["valid"],
     tokenizer=model_obj.tokenizer,
     compute_metrics=compute_metrics,
+    data_collator = data_collator
 )
 
 trainer.train(resume_from_checkpoint=args_dict["resume_from_checkpoint"])
@@ -236,6 +235,7 @@ print("finished training")
 eval_res = trainer.evaluate()
 print(eval_res)
 
+# %%
 # Add to saving from here
 Path("models").mkdir(parents=True, exist_ok=True)
 trainer.save_model(f"models/{filename}")
@@ -246,16 +246,15 @@ predictions = logits.argmax(1)
 
 # %%
 # TODO: Log this properly
-print(
-    classification_report(
+log = classification_report(
         labels,
         predictions,
-        np.unique(labels),
+        #np.unique(labels),
         target_names=dataset["test"].features["label"].names,
     )
-)
+print(log)
 
-
+# %%
 print("done... saving model")
 
 trainer.save_model(f"models/{filename}")
@@ -263,5 +262,5 @@ model_obj.model.save_pretrained(f"pretrained/{filename}")
 model_obj.tokenizer.save_pretrained(f"pretrained/{filename}")
 
 # %%
-
-# %%
+with open(f"pretrained/{filename}/classification_report.txt", 'w', encoding='utf-8') as f:
+    f.write(log)

@@ -42,7 +42,7 @@ class BERT(nn.Module):
             )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            args_dict["checkpoint_tokenizer"], use_fast=True, padding="max_length"
+            args_dict["checkpoint_tokenizer"], use_fast=True
         )
         self.model.to(device)
         #print(self.model)

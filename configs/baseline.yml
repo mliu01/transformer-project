@@ -25,9 +25,9 @@ checkpoint_model: "uklfr/gottbert-base"
 # the tokenizer checkpoint to work from
 checkpoint_tokenizer: "uklfr/gottbert-base"
 #
-tokenizer_num_processes: 10
+tokenizer_num_processes: 5
 # Number of Workers
-workers: 1
+workers: 2
 # load the best model after training
 load_best: True
 # is a higher value better in the metric you use?
@@ -35,9 +35,10 @@ greater_better: True
 # metric you want to use
 metric_used: "matthews_correlation"
 
-batch_size: 4
+#try to get batch_size as high as possible
+batch_size: 5
 # Learning Rate
-lr_rate: 1e-05
+lr_rate: 1e-04
 weight_decay: 5.0e-1
 # Warm up for the learning rate
 warm_up: 0.2
@@ -55,6 +56,7 @@ split_ratio_train: 0.9
 # Should there be a tensorboard log?
 logging: True
 logging_strategy: "steps"
+#same as evaluatian steps
 logging_steps: 1000 
 evaluation_strategy: "steps"
 evaluation_steps: 1000

@@ -77,6 +77,7 @@ else:
 
 # %%
 filename, filepath = save_config(args_dict)
+print(filename, filepath)
 
 # %%
 writer = SummaryWriter(f"{filepath}/{filename}")

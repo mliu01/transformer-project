@@ -157,25 +157,33 @@ def get_parents(child, relations):
     return parents
 
 
-# +
+# -
+
 train_file = "../data/blurbs_train"
+dev_file = "../data/blurbs_dev"
 test_file = "../data/blurbs_test"
 
 try:
-    f = open(train_file+".txt")
-    f2 = open(test_file+".txt")
+    with open(train_file+".txt") as f:
+        f.close()
+    with open(dev_file+".txt") as f:
+        f.close()
+    with open(test_file+".txt") as f:
+        f.close()
 except FileNotFoundError:
     print("Files not found")
-finally:
-    f.close()
-# -
 
 train_data = load_data(train_file+".txt", 'train')
+dev_data = load_data(dev_file+".txt", 'train')
 test_data = load_data(test_file+".txt", 'train')
 
 df_train = pd.DataFrame(train_data)
 df_train.loc[:, 'label'] = df_train[1].map(lambda x: x[0]) #only first category
 df_train.rename(columns={0: 'text'}, inplace=True)
+
+df_dev = pd.DataFrame(dev_data)
+df_dev.loc[:, 'label'] = df_dev[1].map(lambda x: x[0]) #only first category
+df_dev.rename(columns={0: 'text'}, inplace=True)
 
 df_test = pd.DataFrame(test_data)
 df_test.loc[:, 'label'] = df_test[1].map(lambda x: x[0]) #only first category
@@ -183,19 +191,28 @@ df_test.rename(columns={0: 'text'}, inplace=True)
 
 #export dataframe to json
 df_train[['label', 'text']].to_json(train_file+".json", orient = "records", lines=True, force_ascii=False)
+df_dev[['label', 'text']].to_json(dev_file+".json", orient = "records", lines=True, force_ascii=False)
 df_test[['label', 'text']].to_json(test_file+".json", orient = "records", lines=True, force_ascii=False)
 
-# + endofcell="--"
 #check if all labels are from the first level
 train_check = pd.read_json(train_file+".json", orient='records', lines=True)
+dev_check = pd.read_json(dev_file+".json", orient='records', lines=True)
 test_check = pd.read_json(test_file+".json", orient='records', lines=True)
 # # +
+
+# + endofcell="--"
 h = extract_hierarchies()
 
 for i in train_check['label']:
     if i not in h[0][0]:
         print('unkown labels in train')
 if len(train_data) != len(train_check):
+    print('something went wrong in train')
+
+for i in dev_check['label']:
+    if i not in h[0][0]:
+        print('unkown labels in train')
+if len(dev_data) != len(dev_check):
     print('something went wrong in train')
     
 for i in train_check['label']:
@@ -205,3 +222,9 @@ if len(test_data) != len(test_check):
     print('something went wrong in test')
 # -
 # --
+
+train_check[(train_check['label']=='Literatur & Unterhaltung') | (train_check['label']=='Sachbuch') | (train_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_train'+".json", orient = "records", lines=True, force_ascii=False)
+
+dev_check[(dev_check['label']=='Literatur & Unterhaltung') | (dev_check['label']=='Sachbuch') | (dev_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_dev'+".json", orient = "records", lines=True, force_ascii=False)
+
+test_check[(test_check['label']=='Literatur & Unterhaltung') | (test_check['label']=='Sachbuch') | (test_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_test'+".json", orient = "records", lines=True, force_ascii=False)

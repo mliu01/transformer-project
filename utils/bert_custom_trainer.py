@@ -73,7 +73,7 @@ class TrainerDiceLoss(Trainer):
         """
         labels = inputs.pop("labels")
         outputs = model(**inputs)
-        logits = outputs.logits
+        logits = outputs['logits']
         loss_fct = SelfAdjDiceLoss()
         loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels)
         return (loss, outputs) if return_outputs else loss

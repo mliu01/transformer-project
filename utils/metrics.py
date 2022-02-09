@@ -21,6 +21,7 @@ def compute_metrics(eval_pred: Tuple[np.ndarray, np.ndarray]) -> Dict[str, float
     and returns does a dictonary {"F1-Score": float}
     """
     prob, labels = eval_pred
+    print(prob, labels)
     predictions = np.argmax(prob, axis=1)
     metrics = {}
     metrics.update(

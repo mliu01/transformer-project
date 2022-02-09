@@ -6,6 +6,7 @@ from transformers import (
     AutoConfig,
     set_seed,
 )
+from HierarchicalClassificationHead import ClassificationModel
 
 
 class BERT(nn.Module):
@@ -28,11 +29,12 @@ class BERT(nn.Module):
             output_attentions=False,
             num_labels=num_labels,
             return_dict=True,
-            return_unused_kwargs=True,
+            return_unused_kwargs=True
         )
 
         if args_dict["task_type"] == "classification":
-            self.model = AutoModelForSequenceClassification.from_config(self.config)
+            #self.model = AutoModelForSequenceClassification.from_config(self.config)
+            self.model = ClassificationModel(self.config)
         elif args_dict["task_type"] == "NER":
             self.model = AutoModelForTokenClassification.from_config(self.config)
         
@@ -44,7 +46,7 @@ class BERT(nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(
             args_dict["checkpoint_tokenizer"], use_fast=True
         )
-        self.model.to(device)
+        self.model.to(args_dict['device'])
         #print(self.model)
 
         if args_dict["freeze_layer"]:

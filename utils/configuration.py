@@ -334,7 +334,7 @@ def file_naming(path: Path, config: dict) -> str:
     # Create a string either based on parameters or the explicit experiment name and append a "_V" for Version
     if (not config["experiment_name"]) or (config["experiment_name"] == "None"):
         filename = (
-            f"E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_V"
+            f"E{config['epochs']}_B{config['batch_size']*config['gradient_accumulation_steps']}_LR{config['lr_rate']}_WD{config['weight_decay']}_V"
         )
     else:
         filename = f"{config['experiment_name']}{config['experiment_name_suffix']}_V"

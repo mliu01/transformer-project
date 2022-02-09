@@ -90,20 +90,27 @@ writer = SummaryWriter(f"{filepath}/{filename}")
 json_files = str(Path(args_dict["data_folder"]).joinpath(args_dict["data_file"]))
 # %%
 json_files_train = [json_files.replace(".json", "") + "_train.json"]
+json_files_dev = [json_files.replace(".json", "") + "_dev.json"]
 json_files_test = [json_files.replace(".json", "") + "_test.json"]
 
 dataset_train = load_dataset(
     "json", data_files=json_files_train, chunksize=block_size_10MB
 )["train"]
+
+dataset_dev = load_dataset(
+    "json", data_files=json_files_dev, chunksize=block_size_10MB
+)["train"]
+
 dataset_test = load_dataset(
     "json", data_files=json_files_test, chunksize=block_size_10MB
 )["train"]
 
 dataset_train = dataset_train.class_encode_column("label")
+dataset_dev = dataset_dev.class_encode_column("label")
 dataset_test = dataset_test.class_encode_column("label")
 
 assert (
-    dataset_train.features["label"].names == dataset_test.features["label"].names
+    dataset_train.features["label"].names == dataset_test.features["label"].names == dataset_dev.features["label"].names
 ), "Something went wrong, target_names of train and test should be the same"
 
 
@@ -114,6 +121,12 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 # %%
 dataset_train = dataset_train.map(
+    lambda x: tokenizer(x['text'], truncation=True), 
+    batched=True
+    #num_proc=args_dict["tokenizer_num_processes"]
+)
+
+dataset_dev = dataset_dev.map(
     lambda x: tokenizer(x['text'], truncation=True), 
     batched=True
     #num_proc=args_dict["tokenizer_num_processes"]
@@ -136,14 +149,15 @@ num_labels = dataset_train.features["label"].num_classes
 # %%
 # use shuffle to make sure the order of samples is randomized (deterministically)
 dataset_train = dataset_train.shuffle(seed=args_dict["random_seed"])
-ds_train_testvalid = dataset_train.train_test_split(
-    test_size=(1 - args_dict["split_ratio_train"])
-)
+dataset_dev = dataset_dev.shuffle(seed=args_dict["random_seed"])
+#ds_train_testvalid = dataset_train.train_test_split(
+#    test_size=(1 - args_dict["split_ratio_train"])
+#)
 
 dataset = DatasetDict(
     {
-        "train": ds_train_testvalid["train"],
-        "valid": ds_train_testvalid["test"],
+        "train": dataset_train,
+        "valid": dataset_dev,
         "test": dataset_test
     }
 )
@@ -200,6 +214,7 @@ training_args = TrainingArguments(
     label_smoothing_factor=args_dict["label_smoothing"],
     per_device_train_batch_size=args_dict["batch_size"],
     per_device_eval_batch_size=args_dict["batch_size"],
+    gradient_accumulation_steps=args_dict["gradient_accumulation_steps"],
     num_train_epochs=args_dict["epochs"],
     weight_decay=args_dict["weight_decay"],
     logging_strategy=args_dict["logging_strategy"],
@@ -233,6 +248,7 @@ trainer.train(resume_from_checkpoint=args_dict["resume_from_checkpoint"])
 
 print("finished training")
 
+# %%
 eval_res = trainer.evaluate()
 print(eval_res)
 
@@ -241,7 +257,7 @@ print(eval_res)
 Path("models").mkdir(parents=True, exist_ok=True)
 trainer.save_model(f"models/{filename}")
 
-
+# %%
 logits, labels, metrics = trainer.predict(dataset["test"])
 predictions = logits.argmax(1)
 
@@ -265,3 +281,4 @@ model_obj.tokenizer.save_pretrained(f"pretrained/{filename}")
 # %%
 with open(f"pretrained/{filename}/classification_report.txt", 'w', encoding='utf-8') as f:
     f.write(log)
+

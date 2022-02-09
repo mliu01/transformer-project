@@ -48,7 +48,7 @@ label_smoothing: 0.0
 # Custom Trainer
 custom_trainer: "TrainerDiceLoss"
 # Split Ratio
-split_ratio_train: 0.9
+split_ratio_train: 0.7
 
 # Should there be a tensorboard log?
 logging: True

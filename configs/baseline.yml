@@ -27,7 +27,7 @@ checkpoint_tokenizer: "uklfr/gottbert-base"
 #
 tokenizer_num_processes: 10
 # Number of Workers
-workers: 2
+workers: 0
 # load the best model after training
 load_best: True
 # is a higher value better in the metric you use?

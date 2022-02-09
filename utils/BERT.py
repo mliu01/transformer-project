@@ -33,7 +33,7 @@ class BERT(nn.Module):
         )
 
         if args_dict["task_type"] == "classification":
-            #self.model = AutoModelForSequenceClassification.from_config(self.config)
+            # self.model = AutoModelForSequenceClassification.from_config(self.config)
             self.model = ClassificationModel(self.config)
         elif args_dict["task_type"] == "NER":
             self.model = AutoModelForTokenClassification.from_config(self.config)

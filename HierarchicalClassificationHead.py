@@ -1,18 +1,23 @@
+# %%
+import torch
 import torch.nn as nn
 from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
     AutoConfig
+
 )
+from transformers.modeling_outputs import SequenceClassifierOutput
 import inspect
+from collections import OrderedDict
 
 
-# +
+# %%
 class ClassificationModel(nn.Module):
     def __init__(self, config):
         super(ClassificationModel, self).__init__()
         self.config = config
-        self.roberta = AutoModel.from_config(self.config)
+        self.roberta = AutoModel.from_config(self.config, add_pooling_layer=False)
         self.classifier = FlatClassificationHead(self.config)
         
         
@@ -50,35 +55,14 @@ class ClassificationModel(nn.Module):
         
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
-
+        
         loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
-
-        return {'loss': loss, 'logits': logits, 'hidden_states': outputs.hidden_states, 'attentions': outputs.attentions}
+        
+        return SequenceClassifierOutput(loss=loss,logits=logits,hidden_states=outputs.hidden_states,attentions=outputs.attentions)
     
 class FlatClassificationHead(nn.Module):
     def __init__(self, config):
@@ -95,11 +79,10 @@ class FlatClassificationHead(nn.Module):
         #self.softmax = nn.Softmax() #not needed if cross entropy loss is calculated
         
     def forward(self, inputs, **kwargs):
-        #nn.Flatten()
-        outputs = inputs[0]
+        outputs = inputs[:, 0, :]
         outputs = self.dropout(outputs)
         outputs = self.dense(outputs)
-        outputs = self.act(outputs)
+        outputs = torch.tanh(outputs)
         
         outputs = self.dropout(outputs)
         outputs = self.out_proj(outputs)
@@ -107,19 +90,58 @@ class FlatClassificationHead(nn.Module):
         
         return outputs
 
-# +
+class LocalClassifier(nn.Module):
+    def __init__(self, input_size:int, num_labels:int) -> None:
+        super().__init__()
+        self.lin = nn.Linear(input_size, num_labels)
+        self.droupout = None # ToDo
+
+    def forward(self, inputs, **kwargs):
+        pass # Todo
+
+
+class HierarchicalClassificationHead(nn.Module):
+    def __init__(self, config, hierarchies=[]):
+        super(HierarchicalClassificationHead, self).__init__()
+
+        # self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+       
+        
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+        #self.softmax = nn.Softmax() #not needed if cross entropy loss is calculated
+        
+    def forward(self, inputs, **kwargs):
+        outputs = inputs[:, 0, :]
+        outputs = self.dropout(outputs)
+        outputs = self.dense(outputs)
+        outputs = torch.tanh(outputs)
+        
+        outputs = self.dropout(outputs)
+        outputs = self.out_proj(outputs)
+        #outputs = self.softmax(outputs)
+        
+        return outputs
+
+# %%
 #model = AutoModelForSequenceClassification.from_pretrained('uklfr/gottbert-base')
 
-# +
-#lines = inspect.getsource(model.classifier.forward)
+# %%
+#lines = inspect.getsource(model.__init__)
 
-# +
+# %%
 #print(lines)
 
-# +
+# %%
+#print(lines)
+
+# %%
 #ClassificationModel(config)
 
-# +
+# %%
 #config, unused_kwargs = AutoConfig.from_pretrained(
 #            'uklfr/gottbert-base',
 #            output_attentions=False,
@@ -127,3 +149,4 @@ class FlatClassificationHead(nn.Module):
 #            return_dict=True,
 #            return_unused_kwargs=True
 #        )
+

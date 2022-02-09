@@ -56,7 +56,7 @@ from typing import List, Set, Dict, Tuple, Optional
 transformers.logging.set_verbosity_info()
 
 # %%
-get_ipython().run_line_magic("matplotlib", "inline")
+#get_ipython().run_line_magic("matplotlib", "inline")
 # %% [markdown]
 # ## Configuration and Logging <a class="anchor" id="config"></a>
 
@@ -66,14 +66,14 @@ get_ipython().run_line_magic("matplotlib", "inline")
 block_size_10MB = 10 << 20
 
 # %%
-if isnotebook():
+#if isnotebook():
     # In a notebook you need to just dump the yaml with the configuration details
-    args_dict = yaml_dump_for_notebook()
+args_dict = yaml_dump_for_notebook()
     # print(args_dict)
-else:
-    # This can only be used if this is run as a script. For notebooks use the yaml.dump and configure the yaml file accordingly
-    args, device = parse_arguments()
-    args_dict = args.__dict__
+#else:
+#    # This can only be used if this is run as a script. For notebooks use the yaml.dump and configure the yaml file accordingly
+#    args, device = parse_arguments()
+#    args_dict = args.__dict__
 
 # %%
 filename, filepath = save_config(args_dict)

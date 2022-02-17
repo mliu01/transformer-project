@@ -1,4 +1,4 @@
-# + endofcell="--"
+# %% endofcell="--"
 import os
 from os.path import join
 import json
@@ -12,12 +12,14 @@ from bs4 import BeautifulSoup
 punctuations = string.punctuation
 import pickle
 import pandas as pd
+from pathlib import Path
+import logging
+
 CV_NUM = 3
 # -
-# --
 
+# %%
 # +
-# # +
 def load_isbns(directory):
     isbns = []
     soup = BeautifulSoup(open(join(directory), 'rt', encoding='utf-8').read(), "html.parser")
@@ -74,7 +76,7 @@ def read_relations():
     """
     relations = set([])
     singeltons = set([])
-    REL_FILE =  '../data/hierarchy.txt'
+    REL_FILE =  Path('data/hierarchy.txt')
     with open(REL_FILE, 'r', encoding='utf-8') as f:
         lines = f.readlines()
         for line in lines:
@@ -132,7 +134,7 @@ def adjust_hierarchy(output_b, binarizer):
                         missing = [parent for parent in all_parents if not parent in labels]
                         no_root = True
                         for element in missing:
-                            if element in labels and get_genre_level(element, hierarchy) == 0:
+                            if element in labels and get_level_genre(element, hierarchy) == 0:
                                 labels = labels | all_parents
                                 no_root = False
 
@@ -157,74 +159,112 @@ def get_parents(child, relations):
     return parents
 
 
-# -
+# %%
+def main():
+    logger = logging.getLogger(__name__)
+    logger.info("Building datasets")
 
-train_file = "../data/blurbs_train"
-dev_file = "../data/blurbs_dev"
-test_file = "../data/blurbs_test"
+    folder_path = Path('data')
+    dataset_name = 'blurbs'
 
-try:
-    with open(train_file+".txt") as f:
-        f.close()
-    with open(dev_file+".txt") as f:
-        f.close()
-    with open(test_file+".txt") as f:
-        f.close()
-except FileNotFoundError:
-    print("Files not found")
+    f_type = {
+        'input': '.txt', 'output': '.json'
+    }
 
-train_data = load_data(train_file+".txt", 'train')
-dev_data = load_data(dev_file+".txt", 'train')
-test_data = load_data(test_file+".txt", 'train')
+    level = 3
 
-df_train = pd.DataFrame(train_data)
-df_train.loc[:, 'label'] = df_train[1].map(lambda x: x[0]) #only first category
-df_train.rename(columns={0: 'text'}, inplace=True)
+    def train_file(t):
+        return folder_path.joinpath('{}_train{}'.format(dataset_name, f_type[t]))
 
-df_dev = pd.DataFrame(dev_data)
-df_dev.loc[:, 'label'] = df_dev[1].map(lambda x: x[0]) #only first category
-df_dev.rename(columns={0: 'text'}, inplace=True)
+    def dev_file(t):
+        return folder_path.joinpath('{}_dev{}'.format(dataset_name, f_type[t]))
 
-df_test = pd.DataFrame(test_data)
-df_test.loc[:, 'label'] = df_test[1].map(lambda x: x[0]) #only first category
-df_test.rename(columns={0: 'text'}, inplace=True)
+    def test_file(t):
+        return folder_path.joinpath('{}_test{}'.format(dataset_name, f_type[t]))
 
-#export dataframe to json
-df_train[['label', 'text']].to_json(train_file+".json", orient = "records", lines=True, force_ascii=False)
-df_dev[['label', 'text']].to_json(dev_file+".json", orient = "records", lines=True, force_ascii=False)
-df_test[['label', 'text']].to_json(test_file+".json", orient = "records", lines=True, force_ascii=False)
 
-#check if all labels are from the first level
-train_check = pd.read_json(train_file+".json", orient='records', lines=True)
-dev_check = pd.read_json(dev_file+".json", orient='records', lines=True)
-test_check = pd.read_json(test_file+".json", orient='records', lines=True)
-# # +
+    # %%
+    try:
+        with open(train_file('input')) as f:
+            f.close()
+        with open(dev_file('input')) as f:
+            f.close()
+        with open(test_file('input')) as f:
+            f.close()
+    except FileNotFoundError:
+        print("Files not found")
 
-# + endofcell="--"
-h = extract_hierarchies()
+    # %%
+    train_data = load_data(train_file('input'), 'train')
+    dev_data = load_data(dev_file('input'), 'train')
+    test_data = load_data(test_file('input'), 'train')
 
-for i in train_check['label']:
-    if i not in h[0][0]:
-        print('unkown labels in train')
-if len(train_data) != len(train_check):
-    print('something went wrong in train')
+    # %%
+    df_train = pd.DataFrame(train_data)
+    df_dev = pd.DataFrame(dev_data)
+    df_test = pd.DataFrame(test_data)
 
-for i in dev_check['label']:
-    if i not in h[0][0]:
-        print('unkown labels in train')
-if len(dev_data) != len(dev_check):
-    print('something went wrong in train')
-    
-for i in train_check['label']:
-    if i not in h[0][0]:
-        print('unkown labels in test')           
-if len(test_data) != len(test_check):
-    print('something went wrong in test')
-# -
-# --
+    splits = {'train': df_train, 'dev': df_dev, 'test': df_test}
+    h = extract_hierarchies()
 
-train_check[(train_check['label']=='Literatur & Unterhaltung') | (train_check['label']=='Sachbuch') | (train_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_train'+".json", orient = "records", lines=True, force_ascii=False)
 
-dev_check[(dev_check['label']=='Literatur & Unterhaltung') | (dev_check['label']=='Sachbuch') | (dev_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_dev'+".json", orient = "records", lines=True, force_ascii=False)
+    # %%
+    for key, df in splits.items():
+        df.rename(columns={0: 'text'}, inplace=True)
+        df.loc[:, 'path_list'] = df[1].map(lambda x: '>'.join(x[0:level])) #only categories going to stated hierarchy level
+        df.loc[:, 'list'] = df[1].map(lambda x: x[0:level])
+        df.loc[:, 'label'] = df['list'].map(lambda x: x[-1])
 
-test_check[(test_check['label']=='Literatur & Unterhaltung') | (test_check['label']=='Sachbuch') | (test_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_test'+".json", orient = "records", lines=True, force_ascii=False)
+        df[['lvl{}'.format(i+1) for i in range(level)]] = pd.DataFrame(df.list.tolist(), index= df.index)
+        
+        df = df[['label', 'text', 'path_list'] + ['lvl{}'.format(i+1) for i in range(level)]]
+        df = df.replace(to_replace='None', value=np.nan).dropna() # removes any empty rows
+        
+        # remove rows not in hierachy
+        for lvl in range(level):
+            for label in df['lvl{}'.format(lvl+1)]:
+                if label not in h[0][lvl]:
+                    df.drop(df[df['lvl{}'.format(lvl+1)] == label].index, inplace=True)
+            if lvl+1 == 3 and key != 'train':
+                for label in df['lvl{}'.format(lvl+1)]:
+                    if label not in df_train['label'].values:
+                        df.drop(df[df['lvl{}'.format(lvl+1)] == label].index, inplace=True)
+
+                    
+        df.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, key, f_type['output'])), orient = "records", lines=True, force_ascii=False)
+
+    # %%
+    #check
+    train_check = pd.read_json(train_file('output'), orient='records', lines=True)
+    dev_check = pd.read_json(dev_file('output'), orient='records', lines=True)
+    test_check = pd.read_json(test_file('output'), orient='records', lines=True)
+
+    # %%
+    ## using only labels present in all datasets
+    relevant_labels = list(set.intersection(set(list(train_check['label'])), set(list(dev_check['label'])), set(list(test_check['label']))))
+    splits = {'train': train_check, 'dev': dev_check, 'test': test_check}
+
+    for key, df in splits.items():
+        df = df[df['label'].isin(relevant_labels)]
+        df.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, key, f_type['output'])), orient = "records", lines=True, force_ascii=False)
+
+    logger.info("Training dataset length: {}".format(len(train_check)))
+    logger.info("Validation dataset length: {}".format(len(dev_check)))
+    logger.info("Test dataset length: {}".format(len(test_check)))
+
+    # %%
+    ## only 3 labels
+    #train_check[(train_check['label']=='Literatur & Unterhaltung') | (train_check['label']=='Sachbuch') | (train_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_train'+".json", orient = "records", lines=True, force_ascii=False)
+
+    # %%
+    #dev_check[(dev_check['label']=='Literatur & Unterhaltung') | (dev_check['label']=='Sachbuch') | (dev_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_dev'+".json", orient = "records", lines=True, force_ascii=False)
+
+    # %%
+    #test_check[(test_check['label']=='Literatur & Unterhaltung') | (test_check['label']=='Sachbuch') | (test_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_test'+".json", orient = "records", lines=True, force_ascii=False)
+
+# %%
+if __name__ == '__main__':
+    log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
+
+    main()

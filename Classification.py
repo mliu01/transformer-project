@@ -47,6 +47,7 @@ from utils.configuration import (
     isnotebook,
 )
 from utils.metrics import compute_metrics
+from utils import scorer
 from utils.BERT import BERT
 from typing import List, Set, Dict, Tuple, Optional
 
@@ -68,8 +69,8 @@ block_size_10MB = 10 << 20
 # %%
 #if isnotebook():
     # In a notebook you need to just dump the yaml with the configuration details
-args_dict = yaml_dump_for_notebook()
-    # print(args_dict)
+args_dict = yaml_dump_for_notebook(filepath='configs/hierarchical-baseline.yml')
+#print(args_dict)
 #else:
 #    # This can only be used if this is run as a script. For notebooks use the yaml.dump and configure the yaml file accordingly
 #    args, device = parse_arguments()
@@ -79,8 +80,8 @@ args_dict = yaml_dump_for_notebook()
 filename, filepath = save_config(args_dict)
 print(filename, filepath)
 
-# %%
-writer = SummaryWriter(f"{filepath}/{filename}")
+# %% [raw]
+# writer = SummaryWriter(f"{filepath}/{filename}")
 
 
 # %% [markdown]
@@ -109,9 +110,9 @@ dataset_train = dataset_train.class_encode_column("label")
 dataset_dev = dataset_dev.class_encode_column("label")
 dataset_test = dataset_test.class_encode_column("label")
 
-assert (
-    dataset_train.features["label"].names == dataset_test.features["label"].names == dataset_dev.features["label"].names
-), "Something went wrong, target_names of train and test should be the same"
+#assert (
+#    dataset_train.features["label"].names == dataset_test.features["label"].names == dataset_dev.features["label"].names
+#), "Something went wrong, target_names of train and test should be the same"
 
 
 # %%
@@ -139,9 +140,6 @@ dataset_test = dataset_test.map(
 )
 
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
-# %%
-#len(dataset_train[0]['input_ids'])
 
 # %%
 num_labels = dataset_train.features["label"].num_classes
@@ -196,11 +194,23 @@ model_obj = BERT(
     args_dict, num_labels=num_labels
 )
 
+
+# %%
+
+train_set, dev_set, test_set = model_obj.get_datasets()
+dataset = DatasetDict(
+    {
+        "train": train_set,
+        "valid": dev_set,
+        "test": test_set
+    }
+)
+
 # %%
 trainer_class = Trainer
-if args_dict["custom_trainer"] == "TrainerDiceLoss":
-    trainer_class = TrainerDiceLoss
-    print("USING CUSTOM TRAINER CLASS")
+#if args_dict["custom_trainer"] == "TrainerDiceLoss":
+#    trainer_class = TrainerDiceLoss
+#    print("USING CUSTOM TRAINER CLASS")
 
 # %%
 training_args = TrainingArguments(
@@ -234,13 +244,15 @@ training_args = TrainingArguments(
 # %% [markdown]
 # ## Train Model <a class="anchor" id="Train"></a>
 # %%
+evaluator = scorer.HierarchicalScorer('roberta-hierarchical-1', model_obj.get_tree(),
+                                              transformer_decoder=model_obj.get_decoder())
 trainer = trainer_class(
     model_obj.model,
     training_args,
     train_dataset=dataset["train"],
     eval_dataset=dataset["valid"],
     tokenizer=model_obj.tokenizer,
-    compute_metrics=compute_metrics,
+    compute_metrics=evaluator.compute_metrics_transformers_flat,
     data_collator = data_collator
 )
 
@@ -263,11 +275,15 @@ predictions = logits.argmax(1)
 
 # %%
 # TODO: Log this properly
+decoder = model_obj.get_decoder()
+targets = ['Root']
+targets.extend([decoder[i]['value'] for i in list(set(labels))])
+
 log = classification_report(
-        labels,
-        predictions,
+        [decoder[i]['value'] for i in labels], #labels,
+        [decoder[i]['value'] for i in predictions], #predictions,
         #np.unique(labels),
-        target_names=dataset["test"].features["label"].names,
+        target_names= targets #dataset["test"].features["label"].names
     )
 print(log)
 

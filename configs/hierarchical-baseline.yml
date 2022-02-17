@@ -15,6 +15,9 @@ data_folder: "./data"
 data_file: "blurbs.json"
 # Random Seed to generate reproducable random things
 random_seed: 42
+# only run subset dataset?
+test_run: False
+test_run_label_num: 10
 
 # The architecture of the model you're using
 architecture: "roberta"
@@ -27,13 +30,13 @@ checkpoint_tokenizer: "uklfr/gottbert-base"
 #
 tokenizer_num_processes: 10
 # Number of Workers
-workers: 0
+workers: 2
 # load the best model after training
 load_best: True
 # is a higher value better in the metric you use?
 greater_better: True
 # metric you want to use
-metric_used: "matthews_correlation"
+metric_used: "h_f1"
 
 #try to get batch_size as high as possible
 batch_size: 5
@@ -59,9 +62,9 @@ split_ratio_train: 0.7
 logging: True
 logging_strategy: "steps"
 #same as evaluatian steps
-logging_steps: 1000 
+logging_steps: 500 
 evaluation_strategy: "steps"
-evaluation_steps: 1000
+evaluation_steps: 500
 save_strategy: "steps"
-save_steps: 5000
+save_steps: 2500
 save_limits: 5

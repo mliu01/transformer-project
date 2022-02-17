@@ -4,16 +4,20 @@ set -e
 URL="https://www.inf.uni-hamburg.de/en/inst/ab/lt/resources/data/germeval-2019-hmc/germeval2019t1-public-data-final.zip"
 FILE="germeval2019t1-public-data-final.zip"
 
-if wget "$URL"; then
-    echo "..using wget"
-else curl -k -L -s --compressed $URL > $FILE
-    echo "..using curl instead"
+if test -f "$FILE"; then
+    echo "File already exists"
+else
+    if wget "$URL"; then
+        echo "..using wget"
+    else curl -k -L -s --compressed $URL > $FILE
+        echo "..using curl"
+    fi
 fi
-unzip $FILE -d ../data
+unzip $FILE -d data
 rm $FILE
     
 #find all files and directories except train and test dataset
-files () { find ../data/* -not -name "blurbs_train.txt" -not -name "blurbs_test.txt" -not -name "blurbs_dev.txt" -not -name "hierarchy.txt" "$@"; }
+files () { find data/* -not -name "blurbs_train.txt" -not -name "blurbs_test.txt" -not -name "blurbs_dev.txt" -not -name "hierarchy.txt" -not -name "*.json" -not -name "*.pkl" "$@"; }
 
 echo
 echo "Deleting $(files)"
@@ -26,10 +30,13 @@ then
     echo "..deleted"
     
     #execute python script to get datasets as json files
-    echo "..executing python script"
-    python dataset.py
+    echo "..executing dataset script"
+    python utils/dataset.py
 
-    files () { find ../data/* -name "*.txt" "$@"; }
+    echo "..executing building tree script"
+    python utils/build_tree_from_dataset.py
+
+    files () { find data/* -name "*.txt" "$@"; }
     
     echo "Deleting $(files)"
     read -p "Continue? (y/n) " -n 1 -r

@@ -246,11 +246,28 @@ def main():
 
     for key, df in splits.items():
         df = df[df['label'].isin(relevant_labels)]
+        logger.info("Initial {} dataset length: {}".format(key, len(df)))
         df.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, key, f_type['output'])), orient = "records", lines=True, force_ascii=False)
 
-    logger.info("Training dataset length: {}".format(len(train_check)))
-    logger.info("Validation dataset length: {}".format(len(dev_check)))
-    logger.info("Test dataset length: {}".format(len(test_check)))
+    train_check = pd.read_json(train_file('output'), orient='records', lines=True)
+    dev_check = pd.read_json(dev_file('output'), orient='records', lines=True)
+    test_check = pd.read_json(test_file('output'), orient='records', lines=True)
+    
+    ##
+    splits = {'train': train_check, 'dev': dev_check, 'test': test_check}
+
+    new_train = pd.concat([train_check, dev_check])
+    new_train = new_train.groupby('label').filter(lambda x : len(x)>=30)
+
+    for key, df in splits.items():
+        df = df[df['label'].isin(new_train['label'])]
+        logger.info("{} dataset length: {}".format(key, len(df)))
+        df.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, key, f_type['output'])), orient = "records", lines=True, force_ascii=False)
+
+    new_train.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, 'train2', f_type['output'])), orient = "records", lines=True, force_ascii=False)
+    logger.info("Training with validation dataset length: {}".format(len(new_train)))
+
+
 
     # %%
     ## only 3 labels
@@ -268,3 +285,5 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
 
     main()
+
+# %%

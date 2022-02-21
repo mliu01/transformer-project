@@ -337,7 +337,7 @@ def file_naming(path: Path, config: dict) -> str:
             f"E{config['epochs']}_B{config['batch_size']*config['gradient_accumulation_steps']}_LR{config['lr_rate']}_WD{config['weight_decay']}_V"
         )
     else:
-        filename = f"{config['experiment_name']}{config['experiment_name_suffix']}_V"
+        filename = f"{config['experiment_name']}_{config['experiment_name_suffix']}_E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_V"
 
     # Search all already existing files with the given name
     file_list = [name for name in glob.glob(f"{path}/{filename}[0-9][0-9][0-9].yml")]

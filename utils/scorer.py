@@ -1,6 +1,7 @@
 from sklearn.metrics import precision_recall_fscore_support, f1_score
 from networkx import all_pairs_shortest_path_length, relabel_nodes
 from contextlib import contextmanager
+from sklearn.model_selection import PredefinedSplit
 from sklearn.preprocessing import MultiLabelBinarizer
 import logging
 import numpy as np

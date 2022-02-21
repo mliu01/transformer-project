@@ -16,7 +16,7 @@ import pandas as pd
 
 class BERT(nn.Module):
     def __init__(
-        self, args_dict: dict, device: str = "cuda", num_labels: int = 10,
+        self, args_dict: dict, device: str = "cuda", num_labels: int = 10, dataset=None
     ):
         """Loads the model and freezes the layers
 
@@ -27,13 +27,12 @@ class BERT(nn.Module):
             num_labels (int, optional): number of labels. 1 for Regression. Default to 10 classes.
         """
         super(BERT, self).__init__()
-        self.dataset = {}
+        self.dataset = dataset
         self.tree = None
         self.root = None
         
         self.data_name = args_dict['data_file'].split(".")[0]
-        self.load_datasets()
-        self.load_tree()        
+        self.load_tree()      
 
         self.config, self.unused_kwargs = AutoConfig.from_pretrained(
             args_dict['checkpoint_model'],
@@ -87,26 +86,11 @@ class BERT(nn.Module):
 
                 df_ds = df_ds[df_ds['label'].isin(label_sample)]
 
-            texts = [i for i in df_ds['text'].values]
-
-            # Normalize label values
-            labels = [value.replace(' ', '_') for value in df_ds['label'].values]
-
-            tf_ds[key] = CategoryDatasetFlat(texts, labels, self.tokenizer, normalized_encoder)
+            tf_ds[key] = CategoryDatasetFlat(df_ds, normalized_encoder)
 
         self.dataset = tf_ds
         if args_dict["freeze_layer"]:
             self.freeze(args_dict["freeze_layer"], model_typ=args_dict["architecture"])
-
-    def load_datasets(self):
-        """Load dataset for the given experiments"""
-        splits = ['train', 'dev', 'test']
-
-        for split in splits:
-            relative_path = '{}_{}.json'.format(self.data_name, split)
-            data_dir = Path('data')
-            file_path = data_dir.joinpath(relative_path)
-            self.dataset[split] = pd.read_json(file_path, orient='record', lines=True)
 
     def load_tree(self):
         data_dir = Path('data')
@@ -207,7 +191,7 @@ class BERT(nn.Module):
                 print("{}: {}".format(k, v.requires_grad)) # Prints a list of all layers that can still be trained after freezing
 
     def get_datasets(self):
-        return self.dataset['train'], self.dataset['dev'], self.dataset['test']
+        return self.dataset['train'], self.dataset['valid'], self.dataset['test']
     def get_tree(self):
         return self.tree
     def get_decoder(self):

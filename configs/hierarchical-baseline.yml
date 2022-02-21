@@ -8,7 +8,7 @@ task_type: "classification"
 # GPU(cuda) or CPU
 device: "cuda"
 # an identifyable name (suffix)
-experiment_name: None
+experiment_name: "roberta-hierarchical"
 experiment_name_suffix: "test"
 # folder and file data is stored in
 data_folder: "./data"
@@ -48,7 +48,7 @@ weight_decay: 5.0e-1
 # Warm up for the learning rate
 warm_up: 0.2
 lr_scheduler_type: "linear"
-epochs: 5
+epochs: 10
 oversampling: 0
 # Number of layers in the pretrained model to not train
 freeze_layer: 6
@@ -56,13 +56,13 @@ label_smoothing: 0
 # Custom Trainer
 custom_trainer: "TrainerDiceLoss"
 # Split Ratio
-split_ratio_train: 0.7
+split_ratio_train: 0.75
 
 # Should there be a tensorboard log?
 logging: True
 logging_strategy: "steps"
 #same as evaluatian steps
-logging_steps: 500 
+logging_steps: 500
 evaluation_strategy: "steps"
 evaluation_steps: 500
 save_strategy: "steps"

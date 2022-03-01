@@ -1,4 +1,3 @@
-
 class TreeUtils():
 
     def __init__(self, tree):
@@ -35,7 +34,7 @@ class TreeUtils():
         for i in range(len(path)):
             counter = 0
             nodes_per_lvl = self.get_all_nodes_per_lvl(i)
-            for node in nodes_per_lvl:
+            for node in list(nodes_per_lvl):
                 counter += 1
                 if node == path[i]:
                     normalized_path.append(counter)
@@ -62,7 +61,7 @@ class TreeUtils():
         num_labels_per_level = {}
         for i in range(3):
             nodes_per_lvl = [node for node in self.get_all_nodes_per_lvl(i)]
-            num_labels_per_level[i+1] = len(nodes_per_lvl) + 1# Plus 1 for ooc
+            num_labels_per_level[i] = len(nodes_per_lvl) + 1# Plus 1 for ooc
 
         return num_labels_per_level
 

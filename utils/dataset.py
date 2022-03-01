@@ -1,16 +1,9 @@
 # %% endofcell="--"
-import os
 from os.path import join
-import json
-import codecs
-import argparse
 import numpy as np
-import io
-import pickle
 import string
 from bs4 import BeautifulSoup
 punctuations = string.punctuation
-import pickle
 import pandas as pd
 from pathlib import Path
 import logging
@@ -158,53 +151,51 @@ def get_parents(child, relations):
                 parents.append(current_parent)
     return parents
 
+# %%
+# test if dataset files are there    
+folder_path = Path('data')
+dataset_name = 'blurbs'
+
+f_type = {
+    'input': '.txt', 'output': '.json'
+}
+
+level = 3
+
+def train_file(name=dataset_name, t='input'):
+    return folder_path.joinpath('{}_train{}'.format(name, f_type[t]))
+
+def dev_file(name=dataset_name, t='input'):
+    return folder_path.joinpath('{}_dev{}'.format(name, f_type[t]))
+
+def test_file(name=dataset_name, t='input'):
+    return folder_path.joinpath('{}_test{}'.format(name, f_type[t]))
+
+try:
+    with open(train_file()) as f:
+        f.close()
+    with open(dev_file()) as f:
+        f.close()
+    with open(test_file()) as f:
+        f.close()
+except FileNotFoundError:
+    print("Files not found")
 
 # %%
 def main():
     logger = logging.getLogger(__name__)
-    logger.info("Building datasets")
-
-    folder_path = Path('data')
-    dataset_name = 'blurbs'
-
-    f_type = {
-        'input': '.txt', 'output': '.json'
-    }
-
-    level = 3
-
-    def train_file(t):
-        return folder_path.joinpath('{}_train{}'.format(dataset_name, f_type[t]))
-
-    def dev_file(t):
-        return folder_path.joinpath('{}_dev{}'.format(dataset_name, f_type[t]))
-
-    def test_file(t):
-        return folder_path.joinpath('{}_test{}'.format(dataset_name, f_type[t]))
-
+    logger.info(f"Building datasets with hierarchy level: {level}")
 
     # %%
-    try:
-        with open(train_file('input')) as f:
-            f.close()
-        with open(dev_file('input')) as f:
-            f.close()
-        with open(test_file('input')) as f:
-            f.close()
-    except FileNotFoundError:
-        print("Files not found")
+    train_data = load_data(train_file(), 'train')
+    dev_data = load_data(dev_file(), 'train')
+    test_data = load_data(test_file(), 'train')
 
     # %%
-    train_data = load_data(train_file('input'), 'train')
-    dev_data = load_data(dev_file('input'), 'train')
-    test_data = load_data(test_file('input'), 'train')
-
-    # %%
-    df_train = pd.DataFrame(train_data)
-    df_dev = pd.DataFrame(dev_data)
+    df_train = pd.concat([pd.DataFrame(train_data), pd.DataFrame(dev_data)])
     df_test = pd.DataFrame(test_data)
 
-    splits = {'train': df_train, 'dev': df_dev, 'test': df_test}
+    splits = {'train': df_train, 'test': df_test}
     h = extract_hierarchies()
 
 
@@ -215,69 +206,57 @@ def main():
         df.loc[:, 'list'] = df[1].map(lambda x: x[0:level])
         df.loc[:, 'label'] = df['list'].map(lambda x: x[-1])
 
-        df[['lvl{}'.format(i+1) for i in range(level)]] = pd.DataFrame(df.list.tolist(), index= df.index)
+        df[[f'lvl{i+1}' for i in range(level)]] = pd.DataFrame(df.list.tolist(), index= df.index)
         
-        df = df[['label', 'text', 'path_list'] + ['lvl{}'.format(i+1) for i in range(level)]]
+        df = df[['label', 'text', 'path_list'] + [f'lvl{i+1}' for i in range(level)]]
         df = df.replace(to_replace='None', value=np.nan).dropna() # removes any empty rows
         
-        # remove rows not in hierachy
+        # remove rows not in hierarchy
         for lvl in range(level):
-            for label in df['lvl{}'.format(lvl+1)]:
+            for label in df[f'lvl{lvl+1}']:
                 if label not in h[0][lvl]:
-                    df.drop(df[df['lvl{}'.format(lvl+1)] == label].index, inplace=True)
+                    df.drop(df[df[f'lvl{lvl+1}'] == label].index, inplace=True)
             if lvl+1 == 3 and key != 'train':
-                for label in df['lvl{}'.format(lvl+1)]:
+                for label in df[f'lvl{lvl+1}']:
                     if label not in df_train['label'].values:
-                        df.drop(df[df['lvl{}'.format(lvl+1)] == label].index, inplace=True)
+                        df.drop(df[df[f'lvl{lvl+1}'] == label].index, inplace=True)
 
-                    
-        df.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, key, f_type['output'])), orient = "records", lines=True, force_ascii=False)
-
-    # %%
-    #check
-    train_check = pd.read_json(train_file('output'), orient='records', lines=True)
-    dev_check = pd.read_json(dev_file('output'), orient='records', lines=True)
-    test_check = pd.read_json(test_file('output'), orient='records', lines=True)
+        logger.info(f"Initial {key} dataset length: {len(df)}")            
+        df.to_json(folder_path.joinpath(f"{dataset_name}_{key}{f_type['output']}"), orient = "records", lines=True, force_ascii=False)
 
     # %%
+def extra_main(name):
+    logger = logging.getLogger(__name__)
+    logger.info("Building datasets with at least 30 entries and adding underscore to labels")
+
+    train_check = pd.read_json(train_file(t='output'), orient='records', lines=True)
+    test_check = pd.read_json(test_file(t='output'), orient='records', lines=True)
+
     ## using only labels present in all datasets
-    relevant_labels = list(set.intersection(set(list(train_check['label'])), set(list(dev_check['label'])), set(list(test_check['label']))))
-    splits = {'train': train_check, 'dev': dev_check, 'test': test_check}
+    train_check = train_check.groupby('label').filter(lambda x : len(x)>=30)
+    relevant_labels = list(set.intersection(set(list(train_check['label'])), set(list(test_check['label']))))
+    splits = {'train': train_check, 'test': test_check}
 
     for key, df in splits.items():
-        df = df[df['label'].isin(relevant_labels)]
-        logger.info("Initial {} dataset length: {}".format(key, len(df)))
-        df.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, key, f_type['output'])), orient = "records", lines=True, force_ascii=False)
+        df = df[df['label'].isin(relevant_labels)].copy()
+        df['label'] = df['label'].apply(lambda x: x.replace(' ', '_'))
+        logger.info(f"Finished {key} dataset length: {len(df)}")
+        df.to_json(folder_path.joinpath(f"{name}_{key}{f_type['output']}"), orient = "records", lines=True, force_ascii=False)
 
-    train_check = pd.read_json(train_file('output'), orient='records', lines=True)
-    dev_check = pd.read_json(dev_file('output'), orient='records', lines=True)
-    test_check = pd.read_json(test_file('output'), orient='records', lines=True)
-    
-    ##
-    splits = {'train': train_check, 'dev': dev_check, 'test': test_check}
+# %%
+def lowercase_main(ds, name):
+    logger = logging.getLogger(__name__)
+    logger.info("Building lowercased datasets")
 
-    new_train = pd.concat([train_check, dev_check])
-    new_train = new_train.groupby('label').filter(lambda x : len(x)>=30)
+    train_check = pd.read_json(train_file(name=ds, t='output'), orient='records', lines=True)
+    test_check = pd.read_json(test_file(name=ds, t='output'), orient='records', lines=True)
+
+    splits = {'train': train_check,'test': test_check}
 
     for key, df in splits.items():
-        df = df[df['label'].isin(new_train['label'])]
-        logger.info("{} dataset length: {}".format(key, len(df)))
-        df.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, key, f_type['output'])), orient = "records", lines=True, force_ascii=False)
-
-    new_train.to_json(folder_path.joinpath('{}_{}{}'.format(dataset_name, 'train2', f_type['output'])), orient = "records", lines=True, force_ascii=False)
-    logger.info("Training with validation dataset length: {}".format(len(new_train)))
-
-
-
-    # %%
-    ## only 3 labels
-    #train_check[(train_check['label']=='Literatur & Unterhaltung') | (train_check['label']=='Sachbuch') | (train_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_train'+".json", orient = "records", lines=True, force_ascii=False)
-
-    # %%
-    #dev_check[(dev_check['label']=='Literatur & Unterhaltung') | (dev_check['label']=='Sachbuch') | (dev_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_dev'+".json", orient = "records", lines=True, force_ascii=False)
-
-    # %%
-    #test_check[(test_check['label']=='Literatur & Unterhaltung') | (test_check['label']=='Sachbuch') | (test_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_test'+".json", orient = "records", lines=True, force_ascii=False)
+        df = df.applymap(lambda s: s.lower() if type(s) == str else s)
+        logger.info(f"(lowercase) {key} dataset length: {len(df)}")
+        df.to_json(folder_path.joinpath(f'{name}_{key}.json'), orient = "records", lines=True, force_ascii=False)
 
 # %%
 if __name__ == '__main__':
@@ -285,5 +264,5 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
 
     main()
-
-# %%
+    extra_main(name='part-blurbs')
+    lowercase_main(ds='part-blurbs', name='lowercase-blurbs')

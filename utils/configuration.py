@@ -319,8 +319,11 @@ def save_config(config: dict) -> Tuple[str, str]:
 
     filename = file_naming(p, config)
     filepath = p / filename
+    
+    Path(filepath).mkdir(parents=True, exist_ok=True)
+    yml_file = filepath.joinpath(f"{filename}.yml")
 
-    with open(f"{str(filepath)}.yml", "w", encoding="utf-8") as f:
+    with open(yml_file, "w", encoding="utf-8") as f:
         yaml.dump(
             config, f, indent=4
         )  # We dump the currently used Hyperparameters as yml with a version number in the created/accessed folder
@@ -337,7 +340,7 @@ def file_naming(path: Path, config: dict) -> str:
             f"E{config['epochs']}_B{config['batch_size']*config['gradient_accumulation_steps']}_LR{config['lr_rate']}_WD{config['weight_decay']}_V"
         )
     else:
-        filename = f"{config['experiment_name']}_{config['experiment_name_suffix']}_E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_V"
+        filename = f"{config['experiment_name']}_{config['experiment_name_suffix']}_E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_WD{config['weight_decay']}_V"
 
     # Search all already existing files with the given name
     file_list = [name for name in glob.glob(f"{path}/{filename}[0-9][0-9][0-9].yml")]

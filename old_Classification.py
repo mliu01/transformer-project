@@ -228,7 +228,7 @@ training_args = TrainingArguments(
     dataloader_num_workers=args_dict["workers"],
     disable_tqdm=False,
     remove_unused_columns=True,
-    dataloader_drop_last=args_dict["load_best"]
+    dataloader_drop_last=args_dict["drop_last"]
 )
 
 # %% [markdown]

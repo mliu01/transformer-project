@@ -12,8 +12,6 @@ from utils.category_dataset_flat import CategoryDatasetFlat
 from pathlib import Path
 import pickle
 
-import pandas as pd
-
 class BERT(nn.Module):
     def __init__(
         self, args_dict: dict, device: str = "cuda", num_labels: int = 10, dataset=None
@@ -26,13 +24,12 @@ class BERT(nn.Module):
             tokenizer_checkpoint: same as above for tokenizer
             num_labels (int, optional): number of labels. 1 for Regression. Default to 10 classes.
         """
-        super(BERT, self).__init__()
+        super().__init__()
+        self.data_name = args_dict['data_file']
         self.dataset = dataset
         self.tree = None
         self.root = None
-        
-        self.data_name = args_dict['data_file'].split(".")[0]
-        self.load_tree()      
+        self.load_tree(args_dict['data_folder'])      
 
         self.config, self.unused_kwargs = AutoConfig.from_pretrained(
             args_dict['checkpoint_model'],
@@ -42,9 +39,6 @@ class BERT(nn.Module):
             return_unused_kwargs=True,
         )
 
-        self.test = (
-            args_dict['test_run'] if args_dict['test_run'] is not None else False # default False
-        )
         normalized_encoder, self.normalized_decoder, sorted_normalized_paths = self.intialize_hierarchy_paths()
 
         self.config.num_labels_per_lvl = self.tree_utils.get_number_of_nodes_lvl()
@@ -54,9 +48,17 @@ class BERT(nn.Module):
             args_dict["checkpoint_tokenizer"], use_fast=True, model_max_length=512
         )
 
-        if args_dict["task_type"] == "classification":
-            # self.model = AutoModelForSequenceClassification.from_config(self.config)
-            self.model = ClassificationModel(self.config)
+        if args_dict["task_type"] == "hierarchical-classification":
+            self.model = ClassificationModel(self.config, args_dict["task_type"])
+            tf_ds = {}
+            for key in self.dataset:
+                tf_ds[key] = CategoryDatasetFlat(self.dataset[key], normalized_encoder)
+            self.dataset = tf_ds
+
+        elif args_dict["task_type"] == "flat-classification":
+            self.model = ClassificationModel(self.config, args_dict["task_type"])
+        elif args_dict["task_type"] == "classification":
+            self.model = AutoModelForSequenceClassification.from_config(self.config)
         elif args_dict["task_type"] == "NER":
             self.model = AutoModelForTokenClassification.from_config(self.config)
         
@@ -66,41 +68,18 @@ class BERT(nn.Module):
             )
         
         self.model.to(args_dict['device'])
-        #print(self.model)
 
-        tf_ds = {}
-        for key in self.dataset:
-            df_ds = self.dataset[key]
-            if self.test:
-                # load only subset of the data
-
-                #DONT COMMIT CHANGE
-                #df_ds = df_ds[df_ds['category'] == '67010100_Clothing Accessories']
-                df_copy = df_ds
-                df_copy.drop_duplicates(subset=['label'])
-                test_run_label_num = (
-                    args_dict['test_run_label_num'] if args_dict['test_run_label_num'] is not None else 20 # default to 20 labels
-                )
-                if len(df_copy) < test_run_label_num: test_run_label_num = len(df_copy)
-                label_sample = list(df_copy.sample(n = test_run_label_num).label)
-
-                df_ds = df_ds[df_ds['label'].isin(label_sample)]
-
-            tf_ds[key] = CategoryDatasetFlat(df_ds, normalized_encoder)
-
-        self.dataset = tf_ds
         if args_dict["freeze_layer"]:
             self.freeze(args_dict["freeze_layer"], model_typ=args_dict["architecture"])
 
-    def load_tree(self):
-        data_dir = Path('data')
+    def load_tree(self, path):
+        data_dir = Path(path)
         path_to_tree = data_dir.joinpath('tree_{}.pkl'.format(self.data_name))
 
         with open(path_to_tree, 'rb') as f:
             self.tree = pickle.load(f)
 
         self.root = [node[0] for node in self.tree.in_degree if node[1] == 0][0]
-
         self.tree_utils = TreeUtils(self.tree)
 
     def intialize_hierarchy_paths(self):
@@ -128,9 +107,6 @@ class BERT(nn.Module):
         oov_path = [[0, 0, 0]]
         normalized_paths = oov_path + normalized_paths
 
-        #Align length of paths if necessary
-        longest_path = max([len(path) for path in normalized_paths])
-
         # Sort paths ascending
         sorted_normalized_paths = []
         for i in range(len(normalized_paths)):
@@ -155,6 +131,7 @@ class BERT(nn.Module):
         # This if statement catches the different namings of layers in the model architecture 
         if model_typ == "roberta":
             model_arc = self.model.roberta
+            model_arc_full = self.model
 
         elif model_typ == "bert":
             model_arc = self.model.bert
@@ -170,13 +147,13 @@ class BERT(nn.Module):
         if model_typ == "roberta" or model_typ == "bert":
             max_bert_layer = len(model_arc.encoder.layer)
             freezable_modules = [
-                model_arc.encoder.layer,
+                model_arc.embeddings,
                 *model_arc.encoder.layer[: min(n_freeze_layer, max_bert_layer)], # Defines which layers are to be frozen according to the chosen hyperparameters
             ]
         else:  # Must be DistilBert, all unkown architectures have been filtered in the step before. In case a new architecure is added (apart from distil, roberta and bert) modify the if statement accordingly
             max_bert_layer = len(model_arc.transformer.layer)
             freezable_modules = [
-                model_arc.transformer.layer,
+                model_arc.embeddings,
                 *model_arc.transformer.layer[: min(n_freeze_layer, max_bert_layer)], # Defines which layers are to be frozen according to the chosen hyperparameters
             ]
 
@@ -186,13 +163,21 @@ class BERT(nn.Module):
             for param in module.parameters():
                 param.requires_grad = False # This means we do not want to change the weights of the layer throughout the training process
 
-        for k, v in model_arc.named_parameters():
-            if v.requires_grad:
-                print("{}: {}".format(k, v.requires_grad)) # Prints a list of all layers that can still be trained after freezing
+        if model_arc_full:
+            for k, v in model_arc_full.named_parameters():
+                if v.requires_grad:
+                    print("{}: {}".format(k, v.requires_grad)) # Prints a list of all layers that can still be trained after freezing
+        else:
+            for k, v in model_arc.named_parameters():
+                if v.requires_grad:
+                    print("{}: {}".format(k, v.requires_grad)) # Prints a list of all layers that can still be trained after freezing
 
     def get_datasets(self):
         return self.dataset['train'], self.dataset['valid'], self.dataset['test']
+        
     def get_tree(self):
         return self.tree
+
     def get_decoder(self):
         return self.normalized_decoder
+

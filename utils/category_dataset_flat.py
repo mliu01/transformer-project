@@ -1,6 +1,5 @@
 import torch
 
-
 class CategoryDatasetFlat(torch.utils.data.Dataset):
     def __init__(self, ds, encoder):
         # Preprocess encodings

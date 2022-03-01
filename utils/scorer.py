@@ -32,11 +32,6 @@ def score_mwpd(gs: list, prediction: list):
     return {'weighted': weighted_scores, 'macro': macro_scores}
 
 
-# Unsure if this is needed!
-# def f_1_weighted(y_true, y_pred):
-#    return f1_score(y_true, y_pred, labels=np.unique(y_true), average='weighted')
-
-
 def h_score(y_true, y_pred, class_hierarchy, root):
     """ Influenced by https://github.com/asitang/sklearn-hierarchical-classification/blob/develop
     /sklearn_hierarchical/metrics.py """
@@ -231,45 +226,6 @@ class HierarchicalScorer:
         preds = [self.transformer_decoder[pred]['value'] for pred in raw_preds]
 
         return self.compute_metrics_no_encoding(labels, preds)
-
-    def compute_metrics_transformers_hierarchy(self, pred):
-        labels_paths, preds_paths = self.transpose_hierarchy_predictions(pred)
-
-        labels_per_lvl = np.array(labels_paths).transpose().tolist()
-        preds_per_lvl = np.array(preds_paths).transpose().tolist()
-
-        labels = [label_path[-1] for label_path in labels_paths]
-        preds = [pred_path[-1] for pred_path in preds_paths]
-
-        return self.compute_metrics(labels, preds, labels_per_lvl, preds_per_lvl)
-
-    def transpose_hierarchy_predictions(self, pred):
-        labels_paths = pred.label_ids
-        preds_paths = []
-        for prediction in pred.predictions:
-            pred_path = []
-            for i in range(len(prediction)):
-                # Cut additional zeros!
-                if self.num_labels_per_lvl is not None:
-                    pred = prediction[i][:self.num_labels_per_lvl[i+1]].argmax(-1)
-                else:
-                    pred = prediction[i].argmax(-1)
-                pred_path.append(pred)
-            preds_paths.append(pred_path)
-
-        # Decode hierarchy lvl labels
-        for i in range(len(labels_paths[0])):
-            nodes = list(self.get_all_nodes_per_lvl(i))
-            for label_path in labels_paths:
-                if label_path[i] > 0: # Keep 0 (out of category)
-                    index = label_path[i] - 1
-                    label_path[i] = nodes[index]
-            for preds_path in preds_paths:
-                if label_path[i] > 0: # Keep 0 (out of category)
-                    index = preds_path[i] - 1
-                    preds_path[i] = nodes[index]
-
-        return preds_paths, preds_paths
 
     def compute_metrics_transformers_rnn(self, pred):
         labels, preds, labels_per_lvl, preds_per_lvl = self.transpose_rnn_hierarchy(pred)

@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-import os
 from datetime import datetime
 import csv
 
@@ -16,16 +15,15 @@ class ResultCollector():
 
     def persist_results(self, timestamp):
         """Persist Experiment Results"""
-        project_dir = Path(__file__).resolve().parents[2]
-        relative_path = 'results/{}/'.format(self.dataset_name)
-        absolute_path = project_dir.joinpath(relative_path)
+        project_dir = Path(f'{self.experiment_type}')
+        relative_path = project_dir.joinpath('results')
+        
+        Path(relative_path).mkdir(parents=True, exist_ok=True)
+        absolute_path = Path(relative_path)
 
-        if not os.path.exists(absolute_path):
-            os.mkdir(absolute_path)
-
-        file_path = absolute_path.joinpath('{}_{}_results_{}.csv'.format(
-                            self.dataset_name, self.experiment_type,
-                            datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d_%H-%M-%S')))
+        file_path = absolute_path.joinpath('{}_evaluation-results_{}.csv'.format(
+                            self.dataset_name,
+                            datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d_%H-%M')))
 
         header = ['Experiment Name','Dataset','Split']
         # Use first experiment as reference for the metric header

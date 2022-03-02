@@ -1,12 +1,12 @@
 # %% [markdown]
 # # MAKI4U Jumpstart Notebook
-# 
+#
 # A Notebook for training new BERT models for MAKI4U (former CCAI)\
 # This is a refactored version of "bert_train_classifier.ipynb" from the
 # BAS Jumpstart\ and is meant as optimization and general clean up of that notebook\
 # It is possible to use this as notebook or directly as a script
-# 
-# 
+#
+#
 # This notebook is organized in
 # * [Configuration for Model and Logging](#config)
 # * [Loading Dataset](#dataset)
@@ -17,8 +17,8 @@
 # ## Imports
 
 # %%
-%load_ext autoreload
-%autoreload 2
+# %load_ext autoreload
+# %autoreload 2
 
 # %%
 import time
@@ -254,17 +254,7 @@ trainer = trainer_class(
     compute_metrics=evaluator,
     data_collator=data_collator,
     #callbacks=[EarlyStoppingCallback(early_stopping_patience = 10)]
-
 )
-
-# %%
-# import ray
-
-# best_trial = trainer.hyperparameter_search(
-#     direction='maximize',
-#     backend='ray',
-#     n_trials=10
-# )
 
 # %%
 trainer.train(resume_from_checkpoint=args_dict["resume_from_checkpoint"])

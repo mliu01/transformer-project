@@ -224,16 +224,16 @@ def main():
         logger.info(f"Initial {key} dataset length: {len(df)}")            
         df.to_json(folder_path.joinpath(f"{dataset_name}_{key}{f_type['output']}"), orient = "records", lines=True, force_ascii=False)
 
-    # %%
-def extra_main(name):
+# %%
+def extra_main(name, subcount):
     logger = logging.getLogger(__name__)
-    logger.info("Building datasets with at least 30 entries and adding underscore to labels")
+    logger.info(f"Building datasets with at least {subcount} entries and adding underscore to labels")
 
     train_check = pd.read_json(train_file(t='output'), orient='records', lines=True)
     test_check = pd.read_json(test_file(t='output'), orient='records', lines=True)
 
     ## using only labels present in all datasets
-    train_check = train_check.groupby('label').filter(lambda x : len(x)>=30)
+    train_check = train_check.groupby('label').filter(lambda x : len(x)>=subcount)
     relevant_labels = list(set.intersection(set(list(train_check['label'])), set(list(test_check['label']))))
     splits = {'train': train_check, 'test': test_check}
 
@@ -264,5 +264,10 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
 
     main()
-    extra_main(name='part-blurbs')
+    extra_main(name='part-blurbs', subcount=30)
+    extra_main(name='part50-blurbs', subcount=50)
+    extra_main(name='part80-blurbs', subcount=80)
+    extra_main(name='part100-blurbs', subcount=100)
     lowercase_main(ds='part-blurbs', name='lowercase-blurbs')
+
+# %%

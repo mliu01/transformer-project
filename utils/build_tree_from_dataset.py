@@ -1,13 +1,15 @@
+# %%
 import json
 import logging
 import pickle
 
+# %%
 import networkx as nx
 import matplotlib.pyplot as plt
 import random
 import random
 
-    
+# %%
 def hierarchy_pos(G, root=None, width=1., vert_gap = 0.2, vert_loc = 0, xcenter = 0.5):
 
     '''
@@ -74,7 +76,7 @@ def hierarchy_pos(G, root=None, width=1., vert_gap = 0.2, vert_loc = 0, xcenter 
             
     return _hierarchy_pos(G, root, width, vert_gap, vert_loc, xcenter)
 
-
+# %%
 def main(name):
     G = nx.DiGraph()
 
@@ -148,6 +150,7 @@ def main(name):
     with open("./data/tree_{}.pkl".format(name), "wb") as file:
         pickle.dump(G, file=file)
 
+# %%
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
@@ -155,3 +158,6 @@ if __name__ == '__main__':
     main(name = 'blurbs')
     main(name = 'part-blurbs')
     main(name = 'lowercase-blurbs')
+    main(name = 'part50-blurbs')
+    main(name = 'part80-blurbs')
+    main(name = 'part100-blurbs')

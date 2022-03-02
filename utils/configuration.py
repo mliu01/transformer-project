@@ -310,7 +310,6 @@ def save_config(config: dict) -> Tuple[str, str]:
     """
 
     p = Path("log/")
-    # print(config)
     p = p.joinpath(f"{config['task_type']}")
     p = p.joinpath(
         f"{config['architecture']}"
@@ -343,14 +342,15 @@ def file_naming(path: Path, config: dict) -> str:
         filename = f"{config['experiment_name']}_{config['experiment_name_suffix']}_E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_WD{config['weight_decay']}_V"
 
     # Search all already existing files with the given name
-    file_list = [name for name in glob.glob(f"{path}/{filename}[0-9][0-9][0-9].yml")]
+    path_to_file = path.joinpath(filename)
+    file_list = [name for name in glob.glob(f"{path_to_file}[0-9][0-9][0-9]")]
 
     # If there are already files with that name
     if file_list:
 
         # sort the list to get the newest version e.g. [file_V001.yml, file_V002.yml, file_V003.yml] pops "file_V003.yml"
         # [-6:-4] subscribes the Version number file_V**003**.yml --> 003. When converted to int we get 3 and can increment that version by 1
-        i = int(sorted(file_list).pop()[-6:-4]) + 1
+        i = int(sorted(file_list).pop()[-1]) + 1
         i = "00" + str(i)
         i = i[-3:]
         filename += i

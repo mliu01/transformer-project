@@ -9,7 +9,7 @@ task_type: "flat-classification"
 device: "cuda"
 # an identifyable name (suffix)
 experiment_name: "roberta-flat"
-experiment_name_suffix: "freeze-10"
+experiment_name_suffix: "freeze-8"
 # folder and file data is stored in
 data_folder: "./data"
 data_file: "part-blurbs"
@@ -38,11 +38,11 @@ metric_used: "f1"
 drop_last: False
 
 #try to get batch_size as high as possible
-batch_size: 16
+batch_size: 8
 gradient_accumulation_steps: 1
 # Learning Rate, 1e-05
 lr_rate: 1e-04
-#5.0e-1 = 0.5
+#5.0e-1
 weight_decay: 5.0e-1
 # Warm up for the learning rate
 warm_up: 0.2
@@ -50,10 +50,10 @@ lr_scheduler_type: "linear"
 epochs: 10
 oversampling: 0
 # Number of layers in the pretrained model to not train
-freeze_layer: 10
+freeze_layer: 8
 label_smoothing: 0
 # Custom Trainer
-custom_trainer: "TrainerDiceLoss"
+custom_trainer: None #"TrainerDiceLoss"
 # Split Ratio
 split_ratio_train: 0.75
 

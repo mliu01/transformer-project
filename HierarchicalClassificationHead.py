@@ -84,9 +84,9 @@ class ClassificationModel(PreTrainedModel):
             if labels is not None:
                 logits, loss = self.classifier(sequence_output, labels)
 
-            if not return_dict:
-                output = (logits,) + outputs[2:]
-                return ((loss,) + output) if loss is not None else output
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(loss=loss,logits=logits,hidden_states=outputs.hidden_states,attentions=outputs.attentions)
 

@@ -1,12 +1,12 @@
 # %% [markdown]
 # # MAKI4U Jumpstart Notebook
-#
+# 
 # A Notebook for training new BERT models for MAKI4U (former CCAI)\
 # This is a refactored version of "bert_train_classifier.ipynb" from the
 # BAS Jumpstart\ and is meant as optimization and general clean up of that notebook\
 # It is possible to use this as notebook or directly as a script
-#
-#
+# 
+# 
 # This notebook is organized in
 # * [Configuration for Model and Logging](#config)
 # * [Loading Dataset](#dataset)
@@ -17,8 +17,8 @@
 # ## Imports
 
 # %%
-# %load_ext autoreload
-# %autoreload 2
+%load_ext autoreload
+%autoreload 2
 
 # %%
 import time
@@ -107,7 +107,7 @@ dataset_test = load_dataset(
     "json", data_files=json_files_test, chunksize=block_size_10MB
 )["train"]
 
-if args_dict['task_type'] == 'flat-classification':
+if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'classification':
     dataset_train = dataset_train.class_encode_column("label")
     dataset_test = dataset_test.class_encode_column("label")
 
@@ -237,7 +237,7 @@ if args_dict['checkpoint_torch_model']:
 # ## Train Model <a class="anchor" id="Train"></a>
 
 # %%
-if args_dict['task_type'] == 'flat-classification':
+if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'classification':
     evaluator = compute_metrics
     
 elif args_dict['task_type'] == 'hierarchical-classification':
@@ -253,9 +253,18 @@ trainer = trainer_class(
     tokenizer=model_obj.tokenizer,
     compute_metrics=evaluator,
     data_collator=data_collator,
-    callbacks=[EarlyStoppingCallback(early_stopping_patience = 10)]
+    #callbacks=[EarlyStoppingCallback(early_stopping_patience = 10)]
+
 )
 
+# %%
+# import ray
+
+# best_trial = trainer.hyperparameter_search(
+#     direction='maximize',
+#     backend='ray',
+#     n_trials=10
+# )
 
 # %%
 trainer.train(resume_from_checkpoint=args_dict["resume_from_checkpoint"])
@@ -293,16 +302,16 @@ test_pred.to_csv(full_prediction_output, index=False, sep=';', encoding='utf-8',
                 quoting=csv.QUOTE_ALL)
 
 # %%
-# TODO: Log this properly
-log = classification_report(
-        prediction.label_ids, 
-        preds,
-        target_names= target_names
-    )
-print(log)
+# TODO: Log this properly, inaccurate
+# log = classification_report(
+#         prediction.label_ids, 
+#         preds,
+#         target_names= target_names
+#     )
+# print(log)
 
-with open(f"{filename}/results/classification_report.txt", 'w', encoding='utf-8') as f:
-    f.write(log)
+# with open(f"{filename}/results/classification_report.txt", 'w', encoding='utf-8') as f:
+#     f.write(log)
 
 # %%
 print("done... saving model")

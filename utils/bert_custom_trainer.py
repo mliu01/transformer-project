@@ -71,7 +71,7 @@ class TrainerDiceLoss(Trainer):
         https://huggingface.co/transformers/main_classes/trainer.html#transformers.Trainer.compute_loss
         https://huggingface.co/transformers/_modules/transformers/trainer.html#Trainer.compute_loss
         """
-        labels = inputs["labels"]
+        labels = inputs.pop("labels")
         outputs = model(**inputs)
         logits = outputs.logits
         loss_fct = SelfAdjDiceLoss()

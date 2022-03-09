@@ -66,7 +66,7 @@ class TreeUtils():
         return num_labels_per_level
 
     def encode_node(self, name):
-        decoder = dict(self.tree.nodes(data="name"))
+        decoder = dict(self.tree.nodes(data="attribute"))
         encoder = dict([(value, key) for key, value in decoder.items()])
 
         return encoder[name]

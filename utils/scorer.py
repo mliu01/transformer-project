@@ -261,7 +261,7 @@ class HierarchicalScorer:
         return self.derive_leaf_node(path[:len(path)-1], fill_cat)
 
     def compute_metrics_no_encoding(self, labels, preds):
-        decoder = dict(self.tree.nodes(data="name"))
+        decoder = dict(self.tree.nodes(data="attribute"))
         encoder = dict([(value, key) for key, value in decoder.items()])
 
         # Encoder values to compute metrics

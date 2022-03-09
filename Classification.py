@@ -1,12 +1,12 @@
 # %% [markdown]
 # # MAKI4U Jumpstart Notebook
-#
+# 
 # A Notebook for training new BERT models for MAKI4U (former CCAI)\
 # This is a refactored version of "bert_train_classifier.ipynb" from the
 # BAS Jumpstart\ and is meant as optimization and general clean up of that notebook\
 # It is possible to use this as notebook or directly as a script
-#
-#
+# 
+# 
 # This notebook is organized in
 # * [Configuration for Model and Logging](#config)
 # * [Loading Dataset](#dataset)
@@ -17,8 +17,8 @@
 # ## Imports
 
 # %%
-# %load_ext autoreload
-# %autoreload 2
+%load_ext autoreload
+%autoreload 2
 
 # %%
 import time
@@ -281,7 +281,13 @@ assert (
      len(dataset['test']) == len(test_pred)
 ), "Something went wrong, length of test datasets should be the same"
 
-test_pred['predicition'] = [decoder[pred]['value'] for pred in preds]
+if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'classification':
+    p = [pred for pred in preds]
+    
+elif args_dict['task_type'] == 'hierarchical-classification':
+     p = [decoder[pred]['value'] for pred in preds]
+     
+test_pred['predicition'] = p
 
 # %%
 # Persist results

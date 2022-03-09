@@ -24,17 +24,17 @@ def compute_metrics(eval_pred: Tuple[np.ndarray, np.ndarray]) -> Dict[str, float
     metrics = {}
     metrics.update(
         f1_score.compute(predictions=predictions,
-                         references=labels, average="macro")
+                         references=labels, average="weighted")
     )
     metrics.update(accuracy.compute(
         predictions=predictions, references=labels))
     metrics.update(
         precision.compute(predictions=predictions,
-                          references=labels, average="macro")
+                          references=labels, average="weighted")
     )
     metrics.update(
         recall.compute(predictions=predictions,
-                       references=labels, average="macro")
+                       references=labels, average="weighted")
     )
     metrics.update(
         matthews_correlation.compute(

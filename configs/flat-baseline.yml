@@ -9,10 +9,10 @@ task_type: "flat-classification"
 device: "cuda"
 # an identifyable name (suffix)
 experiment_name: "roberta-flat"
-experiment_name_suffix: "freeze-8"
+experiment_name_suffix: "freeze-08-lvl1"
 # folder and file data is stored in
 data_folder: "./data"
-data_file: "part-blurbs"
+data_file: "part-lvl1-blurbs" #same as part-blurbs but label is lvl1
 # Random Seed to generate reproducable random things
 random_seed: 42
 
@@ -28,7 +28,7 @@ checkpoint_tokenizer: "uklfr/gottbert-base" #"roberta-hierarchical_freeze-10_E50
 #
 tokenizer_num_processes: 10
 # Number of Workers
-workers: 2
+workers: 0
 # load the best model after training
 load_best: True
 # is a higher value better in the metric you use?
@@ -43,19 +43,20 @@ gradient_accumulation_steps: 1
 # Learning Rate, 1e-05
 lr_rate: 1e-04
 #5.0e-1
-weight_decay: 5.0e-1
+weight_decay: 2
 # Warm up for the learning rate
-warm_up: 0.2
+warm_up: 0.1
 lr_scheduler_type: "linear"
-epochs: 10
+epochs: 20
 oversampling: 0
 # Number of layers in the pretrained model to not train
 freeze_layer: 8
 label_smoothing: 0
+hidden_dropout_prob: 0.1 #default: 0.1
 # Custom Trainer
-custom_trainer: None #"TrainerDiceLoss"
+custom_trainer: "TrainerDiceLoss"
 # Split Ratio
-split_ratio_train: 0.75
+split_ratio_train: 0.8
 
 # Should there be a tensorboard log?
 logging: True
@@ -65,5 +66,5 @@ logging_steps: 1000
 evaluation_strategy: "steps"
 evaluation_steps: 1000
 save_strategy: "steps"
-save_steps: 2000
-save_limits: 5
+save_steps: 1000
+save_limits: 1

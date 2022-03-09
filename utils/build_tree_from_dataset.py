@@ -2,11 +2,8 @@
 import json
 import logging
 import pickle
-
-# %%
 import networkx as nx
 import matplotlib.pyplot as plt
-import random
 import random
 
 # %%
@@ -134,7 +131,7 @@ def main(name):
                 for node, predecessor in zip(nodes, predecessors):
                     if node not in dict_nodes:
                         dict_nodes[node] = inserted_nodes
-                        G.add_node(dict_nodes[node], name=node)
+                        G.add_node(dict_nodes[node], attribute=node)
                         G.add_edge(dict_nodes[predecessor], dict_nodes[node])
                         new_nodes.append(node)
                         inserted_nodes += 1
@@ -155,9 +152,9 @@ if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
 
-    main(name = 'blurbs')
+    #main(name = 'blurbs')
     main(name = 'part-blurbs')
-    main(name = 'lowercase-blurbs')
-    main(name = 'part50-blurbs')
-    main(name = 'part80-blurbs')
-    main(name = 'part100-blurbs')
+    main(name='part-blurbs-lvl1')
+    main(name='part-blurbs-lvl2')   
+
+# %%

@@ -35,17 +35,7 @@ then
 
     echo "..executing building tree script"
     python utils/build_tree_from_dataset.py
-
-    files () { find data/* -name "*.txt" "$@"; }
     
-    echo "Deleting $(files)"
-    read -p "Continue? (y/n) " -n 1 -r
-    echo 
-    if [[ $REPLY =~ ^[Yy]$ ]]
-    then
-        echo "..deleting"
-        files -delete
-    fi
     echo "..done"
 fi
 echo "..exit"

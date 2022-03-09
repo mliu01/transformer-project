@@ -33,6 +33,7 @@ class BERT(nn.Module):
 
         self.config, self.unused_kwargs = AutoConfig.from_pretrained(
             args_dict['checkpoint_model'],
+            hidden_dropout_prob=args_dict['hidden_dropout_prob'],
             output_attentions=False,
             num_labels=num_labels,
             return_dict=True,
@@ -84,7 +85,7 @@ class BERT(nn.Module):
 
     def intialize_hierarchy_paths(self):
         """initialize paths using the provided tree"""
-        decoder = dict(self.tree.nodes(data="name"))
+        decoder = dict(self.tree.nodes(data="attribute"))
         encoder = dict([(value, key) for key, value in decoder.items()])
 
         leaf_nodes = [node[0] for node in self.tree.out_degree if node[1] == 0]

@@ -109,7 +109,6 @@ class FlatClassificationHead(nn.Module):
        
         self.act = nn.Sigmoid()
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-        #self.softmax = nn.Softmax() #not needed if cross entropy loss is calculated
         
     def forward(self, inputs, **kwargs):
         outputs = inputs
@@ -119,7 +118,6 @@ class FlatClassificationHead(nn.Module):
         
         outputs = self.dropout(outputs)
         outputs = self.out_proj(outputs)
-        #outputs = self.softmax(outputs)
         
         return outputs
 
@@ -235,7 +233,7 @@ class HierarchicalClassificationHead(nn.Module):
         return paths_per_lvl
 
     def update_label_per_lvl(self, labels, lvl, all_paths=False):
-        #Move this function out of training in the future!!!!
+
         unique_values = labels
         updated_labels = labels.clone()
         for value in unique_values:

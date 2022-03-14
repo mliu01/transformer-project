@@ -23,8 +23,13 @@ class CategoryDatasetHierarchy(torch.utils.data.Dataset):
         path = [i.replace(' ', '_') for i in path]
         result = []
         for i in range(len(path)):
-
-            if i+1 == len(path): # -> 3
+            if i == 0:
+                # first one is always right, no duplicates in lvl1 allowed
+                result.append(encoder[i+1][path[i]])
+            
+            else:
+                # checks second node and third node
+                # if duplicates exists, it chooses where predecessor is the same as path[i-1]
                 counter = []
                 for item in decoder[i+1].items():
                     if item[1]['name'] == path[i]:
@@ -36,9 +41,6 @@ class CategoryDatasetHierarchy(torch.utils.data.Dataset):
                             break
                 else:
                     result.append(counter[0][0])
-
-            else:
-                result.append(encoder[i+1][path[i]])
 
         # normalizes from orig. key to normalized version; remove this if you want to use the original keys
         result = normalized_encoder[tuple(result)]['derived_path']

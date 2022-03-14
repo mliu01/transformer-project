@@ -21,7 +21,7 @@ class TreeUtils():
 
     def determine_path_to_root(self, nodes):
 
-        predecessors = self.tree.predecessors(nodes[-1])
+        predecessors = list(self.tree.predecessors(nodes[-1]))
         predecessor = [k for k in predecessors][0]
 
         if predecessor == self.root:
@@ -32,11 +32,11 @@ class TreeUtils():
 
     def get_all_nodes_per_lvl(self, level):
 
-        successors = self.tree.successors(self.root)
+        successors = list(self.tree.successors(self.root))
         while level > 0:
             next_lvl_succesors = []
             for successor in successors:
-                next_lvl_succesors.extend(self.tree.successors(successor))
+                next_lvl_succesors.extend(list(self.tree.successors(successor)))
             successors = next_lvl_succesors
             level -= 1
 
@@ -119,6 +119,7 @@ class TreeUtils():
                 for node in decoder[i+1].items():
                     if node[0] == key:
                         decoder[i+1][key] = {'name': node[1]['name'], 'predecessor': node[1]['predecessor'], 'derived_key': d_key}
+                        break
     
         #for original labels only! encodes labels to normalized path
         for path, normalized_path in zip(paths, normalized_paths):

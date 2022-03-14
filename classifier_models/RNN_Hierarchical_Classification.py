@@ -86,14 +86,6 @@ class RNNClassificationModel(PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def save(self, model, optimizer, output_path):
-        # save
-        torch.save({
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict()
-        }, output_path)       
-
-
 class RNNHead(nn.Module):
     def __init__(self, config):
         super(RNNHead, self).__init__()
@@ -106,9 +98,6 @@ class RNNHead(nn.Module):
         self.i2o = nn.Linear(config.hidden_size + config.hidden_size, config.num_labels)
 
         self.o2o = nn.Linear(config.hidden_size + config.num_labels, config.num_labels)
-
-        # Not used for now!
-        #self.softmax = nn.LogSoftmax(dim=1)
 
 
     def forward(self, input, hidden):

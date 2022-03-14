@@ -59,14 +59,7 @@ class LCPNClassificationModel(PreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(loss=loss,logits=logits,hidden_states=outputs.hidden_states,attentions=outputs.attentions)
-
-    def save(self, model, optimizer, output_path):
-        # save
-        torch.save({
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict()
-        }, output_path)       
+        return SequenceClassifierOutput(loss=loss,logits=logits,hidden_states=outputs.hidden_states,attentions=outputs.attentions)  
     
 class LCPNClassificationHead(nn.Module):
     def __init__(self, config):

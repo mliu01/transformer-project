@@ -1,5 +1,6 @@
 # %% [markdown]
-# # Preprocessing Dataset
+# # Preprocessing Blurbs Dataset
+# (from https://www.inf.uni-hamburg.de/en/inst/ab/lt/resources/data/germeval-2019-hmc/)
 # Processes Dateset, Hierarchy Level is set to 3 (can be changed)
 # - `ds_name`: inital dataset name
 # - `folder_path`: path to raw data
@@ -124,6 +125,7 @@ dev_data = load_data(dev_file, 'train')
 test_data = load_data(test_file, 'train')
 
 # %%
+# all entries
 df = pd.concat([pd.DataFrame(train_data), pd.DataFrame(dev_data), pd.DataFrame(test_data)])
 
 
@@ -172,7 +174,8 @@ def full_dataset(level=None):
         return new_ds_name
 
     df_full = format_df(df)
-    logger.info(f"Initial dataset length: {len(df_full)}")     
+    logger.info(f"Initial dataset length: {len(df_full)}")  
+      
     new_ds_name = f"{ds_name}_full.json"
     df_full.to_json(output_path.joinpath(new_ds_name), orient = "records", lines=True, force_ascii=False)
 
@@ -187,10 +190,10 @@ def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOc
     df = df.dropna()
 
     # each path has to occur at least minOcc times
-    df = df.groupby(df['path_list'].map(tuple)).filter(lambda x : len(x)>=minOcc)
+    #df = df.groupby(df['path_list'].map(tuple)).filter(lambda x : len(x)>=minOcc)
 
     # alternative: each label in last hierarchy level has to occur at least minOcc times
-    # df = df.groupby(df['label'].map(tuple)).filter(lambda x : len(x)>=minOcc)
+    df = df.groupby(df['label'].map(tuple)).filter(lambda x : len(x)>=minOcc)
 
     logger.info(f"Finished dataset length: {len(df)}")
 
@@ -213,7 +216,7 @@ if __name__ == '__main__':
 
     lvl_ds = full_dataset(level=3) # complete dataset with hierarchy level 3, returns new files name
     
-    #extra_processing(ds_file=lvl_ds, out_prefix='blurbs_lvl3')
+    extra_processing(ds_file=lvl_ds, out_prefix='blurbs_lvl3', minOcc = )
     #extra_processing(ds_file="./blurbs_dataset/blurbs_lvl3_full.json", out_prefix='blurbs_reduced', minOcc=200)
 
 

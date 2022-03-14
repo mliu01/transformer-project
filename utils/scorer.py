@@ -200,7 +200,7 @@ class HierarchicalScorer:
 
             results['lvl_{}_acc'.format(counter)] = acc
             results['lvl_{}_matt_corr'.format(counter)] = m_c
-            sum_acc += sum_acc
+            sum_acc += acc
             sum_mc += m_c
             self.logger.info(
                     "{} - Lvl{}: | acc: {:4f} | matt_corr: {:4f}".format(

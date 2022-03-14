@@ -1,12 +1,12 @@
 # %% [markdown]
 # # MAKI4U Jumpstart Notebook
-# 
+#
 # A Notebook for training new BERT models for MAKI4U (former CCAI)\
 # This is a refactored version of "bert_train_classifier.ipynb" from the
 # BAS Jumpstart\ and is meant as optimization and general clean up of that notebook\
 # It is possible to use this as notebook or directly as a script
-# 
-# 
+#
+#
 # This notebook is organized in
 # * [Configuration for Model and Logging](#config)
 # * [Loading Dataset](#dataset)
@@ -17,8 +17,8 @@
 # ## Imports
 
 # %%
-%load_ext autoreload
-%autoreload 2
+# %load_ext autoreload
+# %autoreload 2
 
 # %%
 import time
@@ -291,7 +291,6 @@ trainer.train(resume_from_checkpoint=args_dict['resume_from_checkpoint'])
 # %%
 # Add to saving from here
 Path(f"{filename}/models").mkdir(parents=True, exist_ok=True)
-Path(f"{filename}/torch_pretrained").mkdir(parents=True, exist_ok=True)
 
 # %%
 result_collector = ResultCollector(args_dict['data_file'], filename)  
@@ -412,7 +411,6 @@ print("done... saving model")
 trainer.save_model(f"{filename}/models")
 model_obj.model.save_pretrained(f"{filename}/pretrained")
 model_obj.tokenizer.save_pretrained(f"{filename}/pretrained")
-model_obj.model.save(model_obj.model, trainer.optimizer, f"{filename}/torch_pretrained/model.pth")
 
 # %%
 #TODO: CLEAN UP CODE, a lot is still hard coded for 3 hierarchy levels

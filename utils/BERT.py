@@ -9,7 +9,7 @@ from utils.tree_utils import TreeUtils
 
 class BERT(nn.Module):
     def __init__(
-        self, args_dict: dict, device: str = "cuda", num_labels: int = 10, dataset=None
+        self, args_dict: dict, device: str = "cuda", num_labels: int = 10, dataset=None, dataset_full=None
     ):
         """Loads the model and freezes the layers
 
@@ -119,11 +119,10 @@ class BERT(nn.Module):
                     print("{}: {}".format(k, v.requires_grad)) # Prints a list of all layers that can still be trained after freezing
 
     def get_datasets(self):
-        return self.dataset['train'], self.dataset['valid'], self.dataset['test']
+        return self.dataset
         
     def get_tree(self):
         return self.tree_utils.tree
 
     def get_decoders(self):
         return self.decoder, self.normalized_decoder
-

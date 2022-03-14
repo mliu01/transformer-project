@@ -12,6 +12,7 @@ class TreeUtils():
 
     def load_tree(self, path, name):
         data_dir = Path(path)
+        name = name.split('.')[0]
         path_to_tree = data_dir.joinpath('tree_{}.pkl'.format(name))
 
         with open(path_to_tree, 'rb') as f:

@@ -12,7 +12,7 @@ experiment_name: "roberta-hierarchical"
 experiment_name_suffix: null
 # folder and file data is stored in
 data_folder: "./data/blurbs_dataset"
-data_file: "blurbs_reduced"
+data_file: "blurbs_reduced.json"
 # Random Seed to generate reproducable random things
 random_seed: 42
 

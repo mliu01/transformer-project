@@ -1,12 +1,12 @@
 # %% [markdown]
 # # MAKI4U Jumpstart Notebook
-#
+# 
 # A Notebook for training new BERT models for MAKI4U (former CCAI)\
 # This is a refactored version of "bert_train_classifier.ipynb" from the
 # BAS Jumpstart\ and is meant as optimization and general clean up of that notebook\
 # It is possible to use this as notebook or directly as a script
-#
-#
+# 
+# 
 # This notebook is organized in
 # * [Configuration for Model and Logging](#config)
 # * [Loading Dataset](#dataset)
@@ -17,8 +17,8 @@
 # ## Imports
 
 # %%
-# %load_ext autoreload
-# %autoreload 2
+%load_ext autoreload
+%autoreload 2
 
 # %%
 import time
@@ -55,7 +55,7 @@ from utils.configuration import (
     parse_arguments,
     save_config,
     yaml_dump_for_notebook,
-    isnotebook,
+    isnotebook
 )
 from utils.metrics import Metrics
 from utils import scorer
@@ -79,7 +79,7 @@ get_ipython().run_line_magic("matplotlib", "inline")
 block_size_10MB = 10 << 20
 
 # %%
-args_dict = yaml_dump_for_notebook(filepath='configs/hierarchical-baseline.yml')
+args_dict = yaml_dump_for_notebook(filepath='configs/bert-hierarchical-baseline.yml')
 
 # %%
 filename, filepath = save_config(args_dict)
@@ -96,44 +96,27 @@ writer = SummaryWriter(f"{filepath}")
 json_files = str(Path(args_dict["data_folder"]).joinpath(args_dict["data_file"]))
 
 # %%
-json_files_train = [json_files.replace(".json", "") + "_train.json"]
-json_files_test = [json_files.replace(".json", "") + "_test.json"]
-
-dataset_train = load_dataset(
-    "json", data_files=json_files_train, chunksize=block_size_10MB
-)["train"]
-
-dataset_test = load_dataset(
-    "json", data_files=json_files_test, chunksize=block_size_10MB
+dataset_full = load_dataset(
+    "json", data_files=json_files, chunksize=block_size_10MB
 )["train"]
 
 # %%
 if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'NER':
     if args_dict['data_lvl']:
-        dataset_train = dataset_train.remove_columns("label")
-        dataset_test = dataset_test.remove_columns("label")
+        dataset_full = dataset_full.remove_columns("label")
+        dataset_full = dataset_full.rename_column(f"lvl{args_dict['data_lvl']}", "label")
 
-        dataset_train = dataset_train.rename_column(f"lvl{args_dict['data_lvl']}", "label")
-        dataset_test = dataset_test.rename_column(f"lvl{args_dict['data_lvl']}", "label")
-
-    dataset_train = dataset_train.class_encode_column("label")
-    dataset_test = dataset_test.class_encode_column("label")
+    dataset_full = dataset_full.class_encode_column("label")
 
 elif args_dict['task_type'] == 'hierarchical-classification':
-    dataset_train = dataset_train.remove_columns("label")
-    dataset_test = dataset_test.remove_columns("label")
-
-    dataset_train = dataset_train.rename_column("path_list", "label")
-    dataset_test = dataset_test.rename_column("path_list", "label")
+    if 'path_list' in dataset_full.column_names:
+        dataset_full = dataset_full.remove_columns("label")
+        dataset_full = dataset_full.rename_column("path_list", "label")
 
 # removes unnecessary columns
-rmv_col = [col for col in dataset_train.column_names if col not in ['label', 'text']]
-dataset_train = dataset_train.remove_columns(rmv_col)
-dataset_test = dataset_test.remove_columns(rmv_col)
-
-# assert (
-#     set(dataset_train['label']) == set(dataset_test['label'])
-# ), "Something went wrong, target_names of train and test should be the same"
+rmv_col = [col for col in dataset_full.column_names if col not in ['label', 'text']]
+dataset_full = dataset_full.remove_columns(rmv_col)
+dataset_full
 
 # %%
 tokenizer = AutoTokenizer.from_pretrained(
@@ -141,31 +124,24 @@ tokenizer = AutoTokenizer.from_pretrained(
     )
 
 # %%
-dataset_train = dataset_train.map(
+dataset_full = dataset_full.map(
     lambda x: tokenizer(x['text'], truncation=True), 
     batched=True
 )
-
-dataset_test = dataset_test.map(
-    lambda x: tokenizer(x['text'], truncation=True), 
-    batched=True
-)
-
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-num_labels = len(np.unique(dataset_train['label']))
 
 # %%
 # use shuffle to make sure the order of samples is randomized (deterministically)
-dataset_train = dataset_train.shuffle(seed=args_dict["random_seed"])
-ds_train_testvalid = dataset_train.train_test_split(
-    test_size=(1 - args_dict["split_ratio_train"])
-)
+dataset_full = dataset_full.shuffle(seed=args_dict["random_seed"])
+ds_train_testvalid = dataset_full.train_test_split(test_size=(1 - args_dict["split_ratio_train"])) #split full to train - test
+test_valid = ds_train_testvalid['test'].train_test_split(test_size=((1 - args_dict["split_ratio_train"])/2)) #split test to validaton - test (1:1)
+
 
 dataset = DatasetDict(
     {
         "train": ds_train_testvalid['train'],
-        "valid": ds_train_testvalid['test'],
-        "test": dataset_test
+        "valid": test_valid['train'],
+        "test": test_valid['test']
     }
 )
 
@@ -191,6 +167,11 @@ if args_dict["oversampling"]:
     dataset["train"] = Dataset.from_pandas(new_train)
 
 dataset["train"] = dataset["train"].shuffle(seed=args_dict["random_seed"])
+num_labels = len(set([tuple(label) for label in dataset['test']["label"]]))
+
+# assert (
+#     set([tuple(label) for label in dataset['train']["label"]]) == set([tuple(label) for label in dataset['test']["label"]])
+# ), "Something went wrong, target_names of train and test should be the same"
 
 # %% [markdown]
 # ## Model Definition <a class="anchor" id="model"></a>
@@ -202,12 +183,12 @@ model_obj = BERT(
 )
 
 # %%
-train_set, dev_set, test_set = model_obj.get_datasets()
+dataset_encoded = model_obj.get_datasets()
 dataset = DatasetDict(
 {
-    "train": train_set,
-    "valid": dev_set,
-    "test": test_set
+    "train": dataset_encoded['train'],
+    "valid": dataset_encoded['valid'],
+    "test": dataset_encoded['test']
 }
 )
 
@@ -249,17 +230,12 @@ training_args = TrainingArguments(
     dataloader_drop_last=args_dict["drop_last"]
 )
 
-# %%
-if args_dict['checkpoint_torch_model']:
-    checkpoint = torch.load(args_dict['checkpoint_torch_model'], map_location='cuda')
-    model_obj.model.load_state_dict(checkpoint['model_state_dict'])
-
 # %% [markdown]
 # ## Train Model <a class="anchor" id="Train"></a>
 
 # %%
 if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'NER':
-    evaluator = Metrics(dataset_test.features['label'].names).compute_metrics
+    evaluator = Metrics(dataset_full.features['label'].names).compute_metrics
 
 elif args_dict['task_type'] == 'hierarchical-classification':
     decoder, normalized_decoder = model_obj.get_decoders()
@@ -283,7 +259,7 @@ trainer = trainer_class(
 )
 
 # %%
-dataset['train'].labels #should be normalized! cross entropy loss won't work otherwise
+set([tuple(label) for label in dataset['train'].labels]) #should be normalized! cross entropy loss won't work otherwise
 
 # %%
 trainer.train(resume_from_checkpoint=args_dict['resume_from_checkpoint'])
@@ -314,33 +290,35 @@ if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 
           json.dump(report, metrics, indent=4)
 
 # %%
-if args_dict['task_type'] == 'hierarchical-classification':
-     prediction = trainer.predict(dataset['test'])
-     preds =  np.array(np.array([list(pred.argmax(-1)) for pred in prediction.predictions]).transpose().tolist())
+prediction = trainer.predict(dataset['test'])
 
-     #TODO: hardcoded for 3 levels
-     #labels + prediction are normalized, to get original path/label name use normalized_decoder first and then the decoder (just like below)
+# %%
+#if args_dict['task_type'] == 'hierarchical-classification':
+preds =  np.array(np.array([list(pred.argmax(-1)) for pred in prediction.predictions]).transpose().tolist())
 
-     label_list = []
-     predcition_list = []
-     for i in range(3):
-          # normalized decoder: from derived_key to original key; decoder: from original_key to label name
-          label_list.append([decoder[i+1][normalized_decoder[i+1][label]]['name'] for label in prediction.label_ids[:, i]])
-          predcition_list.append([decoder[i+1][normalized_decoder[i+1][prediction]]['name'] for prediction in preds[:, i]])
+#TODO: hardcoded for 3 levels
+#labels + prediction are normalized, to get original path/label name use normalized_decoder first and then the decoder (just like below)
 
-     test_pred=pd.DataFrame(data={
-     "label_lvl1": label_list[0] ,"prediction_lvl1": predcition_list[0], 
-     "label_lvl2": label_list[1] ,"prediction_lvl2": predcition_list[1],
-     "label_lvl3": label_list[2] ,"prediction_lvl3": predcition_list[2]
-     }) 
+label_list = []
+predcition_list = []
+for i in range(3):
+     # normalized decoder: from derived_key to original key; decoder: from original_key to label name
+     label_list.append([decoder[i+1][normalized_decoder[i+1][label]]['name'] for label in prediction.label_ids[:, i]])
+     predcition_list.append([decoder[i+1][normalized_decoder[i+1][prediction]]['name'] for prediction in preds[:, i]])
 
-     assert (
-     len(dataset['test']) == len(test_pred)
-     ), "Something went wrong, length of test datasets should be the same"
+test_pred=pd.DataFrame(data={
+"label_lvl1": label_list[0] ,"prediction_lvl1": predcition_list[0], 
+"label_lvl2": label_list[1] ,"prediction_lvl2": predcition_list[1],
+"label_lvl3": label_list[2] ,"prediction_lvl3": predcition_list[2]
+}) 
 
-     full_prediction_output = '{}/{}.csv'.format(f"{filename}/results", "prediction-results")
-     test_pred.to_csv(full_prediction_output, index=False, sep=';', encoding='utf-8', quotechar='"',
-          quoting=csv.QUOTE_ALL)
+assert (
+len(dataset['test']) == len(test_pred)
+), "Something went wrong, length of test datasets should be the same"
+
+full_prediction_output = '{}/{}.csv'.format(f"{filename}/results", "prediction-results")
+test_pred.to_csv(full_prediction_output, index=False, sep=';', encoding='utf-8', quotechar='"',
+     quoting=csv.QUOTE_ALL)
 
 # %%
 lvl = 1

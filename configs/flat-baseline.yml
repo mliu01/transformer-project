@@ -8,11 +8,13 @@ task_type: "flat-classification"
 # GPU(cuda) or CPU
 device: "cuda"
 # an identifyable name (suffix)
-experiment_name: "roberta-flat"
-experiment_name_suffix: "freeze-08-lvl1"
+experiment_name: "flat-base"
+experiment_name_suffix: null
 # folder and file data is stored in
-data_folder: "./data"
-data_file: "part-lvl1-blurbs" #same as part-blurbs but label is lvl1
+data_folder: "./data/blurbs_dataset"
+data_file: "blurbs_lvl3"
+# Optional; used to rename columns as label
+data_lvl: 1
 # Random Seed to generate reproducable random things
 random_seed: 42
 
@@ -21,28 +23,26 @@ architecture: "roberta"
 # Resume training
 resume_from_checkpoint: False
 # the checkpoint model to work from
-checkpoint_torch_model: False #"roberta-hierarchical_freeze-10_E5_B16_LR3e-04_WD0.5_V008/torch_pretrained/model.pth"
-checkpoint_model: "uklfr/gottbert-base" #"roberta-hierarchical_freeze-10_E50_B16_LR3e-04_WD0.5_V001/pretrained"
-# the tokenizer checkpoint to work from
-checkpoint_tokenizer: "uklfr/gottbert-base" #"roberta-hierarchical_freeze-10_E50_B16_LR3e-04_WD0.5_V001/pretrained"
+checkpoint_torch_model: False
+checkpoint_model_or_path: "uklfr/gottbert-base"
 #
 tokenizer_num_processes: 10
 # Number of Workers
-workers: 0
+workers: 2
 # load the best model after training
 load_best: True
 # is a higher value better in the metric you use?
 greater_better: True
 # metric you want to use
-metric_used: "f1"
+metric_used: "matthews_correlation"
 drop_last: False
 
 #try to get batch_size as high as possible
 batch_size: 8
 gradient_accumulation_steps: 1
 # Learning Rate, 1e-05
-lr_rate: 1e-04
-#5.0e-1
+lr_rate: 5e-05
+#5.0e-1 = 0.5
 weight_decay: 2
 # Warm up for the learning rate
 warm_up: 0.1
@@ -52,7 +52,7 @@ oversampling: 0
 # Number of layers in the pretrained model to not train
 freeze_layer: 8
 label_smoothing: 0
-hidden_dropout_prob: 0.1 #default: 0.1
+hidden_dropout_prob: 0.1
 # Custom Trainer
 custom_trainer: "TrainerDiceLoss"
 # Split Ratio
@@ -62,9 +62,9 @@ split_ratio_train: 0.8
 logging: True
 logging_strategy: "steps"
 #same as evaluatian steps
-logging_steps: 1000
+logging_steps: 1000 
 evaluation_strategy: "steps"
 evaluation_steps: 1000
 save_strategy: "steps"
-save_steps: 1000
-save_limits: 1
+save_steps: 5000
+save_limits: 2

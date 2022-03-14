@@ -7,15 +7,12 @@ from transformers.modeling_utils import PreTrainedModel
 
 
 # %%
-class ClassificationModel(PreTrainedModel):
-    def __init__(self, config, classifier_type):
+class LCPNClassificationModel(PreTrainedModel):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
         self.roberta = AutoModel.from_config(self.config, add_pooling_layer=False)
-        if classifier_type == 'hierarchical-classification':
-            self.classifier = HierarchicalClassificationHead(self.config)
-        elif classifier_type == 'flat-classification':
-            self.classifier = FlatClassificationHead(self.config)
+        self.classifier = LCPNClassificationHead(self.config)
 
         self.roberta.init_weights()      
         
@@ -55,34 +52,8 @@ class ClassificationModel(PreTrainedModel):
 
         loss = None
         logits = None
-
-        if isinstance(self.classifier, FlatClassificationHead):
-            logits = self.classifier(sequence_output)
-            if labels is not None:
-                if self.config.problem_type is None:
-                    if self.config.num_labels == 1:
-                        self.config.problem_type = "regression"
-                    elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                        self.config.problem_type = "single_label_classification"
-                    else:
-                        self.config.problem_type = "multi_label_classification"
-
-                if self.config.problem_type == "regression":
-                    loss_fct = nn.MSELoss()
-                    if self.config.num_labels == 1:
-                        loss = loss_fct(logits.squeeze(), labels.squeeze())
-                    else:
-                        loss = loss_fct(logits, labels)
-                elif self.config.problem_type == "single_label_classification":
-                    loss_fct = nn.CrossEntropyLoss()
-                    loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-                elif self.config.problem_type == "multi_label_classification":
-                    loss_fct = nn.BCEWithLogitsLoss()
-                    loss = loss_fct(logits, labels)
-
-        if isinstance(self.classifier, HierarchicalClassificationHead):
-            if labels is not None:
-                logits, loss = self.classifier(sequence_output, labels)
+        if labels is not None:
+            logits, loss = self.classifier(sequence_output, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -97,32 +68,7 @@ class ClassificationModel(PreTrainedModel):
             'optimizer_state_dict': optimizer.state_dict()
         }, output_path)       
     
-class FlatClassificationHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-       
-        self.act = nn.Sigmoid()
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-        
-    def forward(self, inputs, **kwargs):
-        outputs = inputs
-        outputs = self.dropout(outputs)
-        outputs = self.dense(outputs)
-        outputs = torch.tanh(outputs)
-        
-        outputs = self.dropout(outputs)
-        outputs = self.out_proj(outputs)
-        
-        return outputs
-
-
-class HierarchicalClassificationHead(nn.Module):
+class LCPNClassificationHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size

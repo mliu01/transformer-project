@@ -1,11 +1,13 @@
 # %% [markdown]
 # # Preprocessing Dataset
-# - `ds_name`: dataset name
-# - `folder_path`: path to raw data and output path
+# Processes Dateset, Hierarchy Level is set to 3 (can be changed)
+# - `ds_name`: inital dataset name
+# - `folder_path`: path to raw data
+# - `output_path`: output path
 # - `train_file`: training data file name
 # - `dev_file`: validation data file name
 # - `test_file`: test data file name
-# - `hierarchy_file`: hierarchy data file name
+# - `hierarchy_file`: hierarchy data file name (optional)
 
 # %% endofcell="--"
 from os.path import join
@@ -24,18 +26,9 @@ print(current_directory)
 
 
 # %%
-def load_isbns(directory):
-    isbns = []
-    soup = BeautifulSoup(open(join(directory), 'rt', encoding='utf-8').read(), "html.parser")
-    for book in soup.findAll('book'):
-        book_soup = BeautifulSoup(str(book), "html.parser")
-        isbns.append(str(book_soup.find("isbn").string))
-    return isbns
-
-
 def load_data(directory, status):
     """
-    Loads labels and blurbs of dataset
+    Loads labels and blurbs of dataset TODO: BeautifulSoup is a very slow during parsing, alternatives?
     """
     data = []
     soup = BeautifulSoup(open(join(directory), 'rt', encoding='utf-8').read(), "html.parser")
@@ -50,7 +43,6 @@ def load_data(directory, status):
             book_soup = BeautifulSoup(str(book), "html.parser")
             data.append(str(book_soup.find("body").string))
     return data
-
 
 def extract_hierarchies():
     """
@@ -109,64 +101,14 @@ def get_level_genre(relations, genre):
                 break
     return height, curr_genre
 
-def adjust_hierarchy(output_b, binarizer):
-    """
-    Correction of nn predictions by either restrictive or transitive method
-    """
-    global ml
-    print("Adjusting Hierarchy")
-    relations,_ = read_relations()
-    hierarchy, _ = extract_hierarchies()
-    new_output = []
-    outputs = binarizer.inverse_transform(output_b)
-    for output in outputs:
-        labels = set(list(output))
-        if len(labels) >= 1:
-            labels_cp = labels.copy()
-            labels_hierarchy = {}
-            for level in hierarchy:
-                for label in labels:
-                    if label in hierarchy[level]:
-                        if level in labels_hierarchy:
-                            labels_hierarchy[level].add(label)
-                        else:
-                            labels_hierarchy[level] = set([label])
-            for level in labels_hierarchy:
-                if level > 0:
-                    for label in labels_hierarchy[level]:
-                        all_parents = get_parents(label, relations)
-                        missing = [parent for parent in all_parents if not parent in labels]
-                        no_root = True
-                        for element in missing:
-                            if element in labels and get_level_genre(element, hierarchy) == 0:
-                                labels = labels | all_parents
-                                no_root = False
-
-                        if len(missing) >= 1:
-                            labels = labels | set(all_parents)
-        new_output.append(tuple(list(labels)))
-    return binarizer.transform(new_output)
-
-def get_parents(child, relations):
-    """
-    Get the parent of a genre
-    """
-    parents = []
-    current_parent = child
-    last_parent = None
-    while current_parent != last_parent:
-        last_parent = current_parent
-        for relation in relations:
-            if relation[1] == current_parent:
-                current_parent = relation[0]
-                parents.append(current_parent)
-    return parents
-
 # %%
 # Paths   
 ds_name = 'blurbs'
 
 folder_path = Path(current_directory + '/data')
+output_path = folder_path.joinpath(f"{ds_name}_dataset")
+Path(output_path).mkdir(parents=True, exist_ok=True)
+
 train_file = folder_path.joinpath(f'{ds_name}_train.txt')
 dev_file = folder_path.joinpath(f'{ds_name}_dev.txt')
 test_file = folder_path.joinpath(f'{ds_name}_test.txt')
@@ -183,83 +125,277 @@ test_data = load_data(test_file, 'train')
 
 # %%
 df = pd.concat([pd.DataFrame(train_data), pd.DataFrame(dev_data), pd.DataFrame(test_data)])
+
+
+# %%
 #df
 
 # %%
-def format_df(df, level):
-    df.rename(columns={0: 'text'}, inplace=True)
-    df.loc[:, 'list'] = df[1].map(lambda x: x[0:level])
-    df.loc[:, 'label'] = df['list'].map(lambda x: x[-1])
+def format_df(df, level=None):
+    '''Renaming columns, adding underscores to all columns except text and if level is specified: create new column path_list'''
 
-    lvl_list = [f'lvl{i+1}' for i in range(level)]
-    df[lvl_list] = pd.DataFrame(df.list.tolist(), index= df.index)
+    ndf = df.copy()
+    ndf.rename(columns={0: 'text'}, inplace=True)
+    ndf.loc[:, 'list'] = ndf[1].map(lambda x: x[0:level])
+    ndf.loc[:, 'label'] = ndf['list'].map(lambda x: x[-1])
 
-    df = df[['label', 'text'] + lvl_list]
-    df = df.replace(to_replace='None', value=np.nan).dropna() 
-    return df
-# %%
-def full_dataset(level):
-    logger = logging.getLogger(__name__)
-    logger.info(f"Building datasets with hierarchy level: {level}")
+    max_len = ndf["list"].map(lambda x: len(x)).max()
+
+    # splits list in seperate columns (needed for later for building tree/graph)
+    lvl_list = [f'lvl{i+1}' for i in range(max_len)]
+    ndf[lvl_list] = pd.DataFrame(ndf.list.tolist(), index= ndf.index)
     
-    h = extract_hierarchies()
-    
-    df_full = format_df(df, level)
-    # remove rows not in hierarchy
-    for lvl in range(level):
-        for label in df_full[f'lvl{lvl+1}']:
-            if label not in h[0][lvl]:
-                df_full.drop(df_full[df_full[f'lvl{lvl+1}'] == label].index, inplace=True)
+    # adds underscore to all but text
+    replacing_columns = list(ndf.drop('text', axis=1).columns)
+    ndf[replacing_columns] = ndf[replacing_columns].replace(' ', '_', regex=True)
 
-    logger.info(f"Initial dataset length: {len(df_full)}") 
-         
-    df_full.to_json(folder_path.joinpath(f"{ds_name}_full.json"), orient = "records", lines=True, force_ascii=False)
+    # adds path_list
+    if level:
+        assert level == max_len
+        lvl_list = lvl_list[:level]
+
+    ndf['path_list'] = ndf[lvl_list].values.tolist()
+    # only relevant columns
+    ndf = ndf[['label', 'text', 'path_list'] + lvl_list] 
+
+    return ndf
+# %%
+def full_dataset(level=None):
+    logger = logging.getLogger(__name__)
+    if level:
+        logger.info(f"Building datasets with hierarchy level: {level}")
+        df_full_lvl = format_df(df, level)
+        logger.info(f"Initial dataset with {level} hierarchy level/s length: {len(df_full_lvl)}") 
+
+        new_ds_name = f"{ds_name}_lvl{level}_full.json"
+        df_full_lvl.to_json(output_path.joinpath(new_ds_name), orient = "records", lines=True, force_ascii=False)
+        return new_ds_name
+
+    df_full = format_df(df)
+    logger.info(f"Initial dataset length: {len(df_full)}")     
+    new_ds_name = f"{ds_name}_full.json"
+    df_full.to_json(output_path.joinpath(new_ds_name), orient = "records", lines=True, force_ascii=False)
+
+    return new_ds_name #return new ds names 
 
 # %%
-def extra_processing(ds_name='blurbs', out='part-blurbs', minOcc=30, split=0.8):
+def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOcc=50, split=0.85):
     logger = logging.getLogger(__name__)
-    logger.info(f"Building datasets with at least {minOcc} entries and adding underscore to labels")
+    logger.info(f"Building datasets with at least {minOcc} entries")
 
-    df = pd.read_json(folder_path.joinpath(f"{ds_name}_full.json"), orient='records', lines=True)
-    df = df.groupby('label').filter(lambda x : len(x)>=minOcc)
+    df = pd.read_json(folder_path.joinpath(ds_file), orient='records', lines=True)
+    df = df.dropna()
 
-    df['label'] = df['label'].apply(lambda x: x.replace(' ', '_'))
+    # each path has to occur at least minOcc times
+    df = df.groupby(df['path_list'].map(tuple)).filter(lambda x : len(x)>=minOcc)
+
+    # alternative: each label in last hierarchy level has to occur at least minOcc times
+    # df = df.groupby(df['label'].map(tuple)).filter(lambda x : len(x)>=minOcc)
 
     logger.info(f"Finished dataset length: {len(df)}")
 
+    # split into train and test dataset
     train_data = df.sample(frac=split)
     test_data = df.drop(train_data.index)
+
     logger.info(f"Train dataset length: {len(train_data)}")
     logger.info(f"Test dataset length: {len(test_data)}")
 
     train_data.to_json(
-        folder_path.joinpath(f"{out}_train.json"), orient = "records", lines=True, force_ascii=False)
+        output_path.joinpath(f"{out_prefix}_train.json"), orient = "records", lines=True, force_ascii=False)
     test_data.to_json(
-        folder_path.joinpath(f"{out}_test.json"), orient = "records", lines=True, force_ascii=False)
+        output_path.joinpath(f"{out_prefix}_test.json"), orient = "records", lines=True, force_ascii=False)
 
 # %%
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
 
-    full_dataset(level=3) #complete dataset with hierarchy level 3
+    lvl_ds = full_dataset(level=3) # complete dataset with hierarchy level 3, returns new files name
     
-    extra_processing()
+    #extra_processing(ds_file=lvl_ds, out_prefix='blurbs_lvl3')
+    #extra_processing(ds_file="./blurbs_dataset/blurbs_lvl3_full.json", out_prefix='blurbs_reduced', minOcc=200)
 
-    train = folder_path.joinpath("part-blurbs_train.json")
-    test = folder_path.joinpath("part-blurbs_test.json")
 
-    for i in range(2):
-        df_train = pd.read_json(train, orient='records', lines=True)
-        df_train['label'] = df_train[f'lvl{i+1}'].apply(lambda x: x.replace(' ', '_'))
+# %% [markdown]
+# # Build Tree from Dataset
+# Takes train and test dataset and builds a graph with every possible path from root to leaf node
+# Is hard coded for 3 hierarchy levels (json_line, nodes dictionaries)
+# - `name`: name of dataset to build tree from (prefix, i.e.: blurbs_train.json -> blurbs)
+
+# %%
+import json
+import logging
+import pickle
+import networkx as nx
+import matplotlib.pyplot as plt
+import random
+import os
+from pathlib import Path
+current_directory = os.getcwd()
+print(current_directory)
+
+# %%
+folder_path = Path(current_directory + '/data/blurbs_dataset')
+output_path = folder_path
+Path(output_path).mkdir(parents=True, exist_ok=True)
+
+
+# %%
+def hierarchy_pos(G, root=None, width=1., vert_gap = 0.2, vert_loc = 0, xcenter = 0.5):
+
+    '''
+    From Joel's answer at https://stackoverflow.com/a/29597209/2966723.  
+    Licensed under Creative Commons Attribution-Share Alike 
     
-        df_test = pd.read_json(test, orient='records', lines=True)
-        df_test['label'] = df_test[f'lvl{i+1}'].apply(lambda x: x.replace(' ', '_'))
+    If the graph is a tree this will return the positions to plot this in a 
+    hierarchical layout.
+    
+    G: the graph (must be a tree)
+    
+    root: the root node of current branch 
+    - if the tree is directed and this is not given, 
+      the root will be found and used
+    - if the tree is directed and this is given, then 
+      the positions will be just for the descendants of this node.
+    - if the tree is undirected and not given, 
+      then a random choice will be used.
+    
+    width: horizontal space allocated for this branch - avoids overlap with other branches
+    
+    vert_gap: gap between levels of hierarchy
+    
+    vert_loc: vertical location of root
+    
+    xcenter: horizontal location of root
+    '''
+    if not nx.is_tree(G):
+        raise TypeError('cannot use hierarchy_pos on a graph that is not a tree')
 
-        df_train.to_json(
-            folder_path.joinpath(f"part-blurbs-lvl{i+1}_train.json"), orient = "records", lines=True, force_ascii=False)
-        df_test.to_json(
-            folder_path.joinpath(f"part-blurbs-lvl{i+1}_test.json"), orient = "records", lines=True, force_ascii=False)
+    if root is None:
+        if isinstance(G, nx.DiGraph):
+            root = next(iter(nx.topological_sort(G)))  #allows back compatibility with nx version 1.11
+        else:
+            root = random.choice(list(G.nodes))
 
+    def _hierarchy_pos(G, root, width=1., vert_gap = 0.2, vert_loc = 0, xcenter = 0.5, pos = None, parent = None):
+        '''
+        see hierarchy_pos docstring for most arguments
+
+        pos: a dict saying where all nodes go if they have been assigned
+        parent: parent of this branch. - only affects it if non-directed
+
+        '''
+    
+        if pos is None:
+            pos = {root:(xcenter,vert_loc)}
+        else:
+            pos[root] = (xcenter, vert_loc)
+        children = list(G.neighbors(root))
+        if not isinstance(G, nx.DiGraph) and parent is not None:
+            children.remove(parent)  
+        if len(children)!=0:
+            dx = width/len(children) 
+            nextx = xcenter - width/2 - dx/2
+            for child in children:
+                nextx += dx
+                pos = _hierarchy_pos(G,child, width = dx, vert_gap = vert_gap, 
+                                    vert_loc = vert_loc-vert_gap, xcenter=nextx,
+                                    pos=pos, parent = root)  
+                  
+        return pos
+
+            
+    return _hierarchy_pos(G, root, width, vert_gap, vert_loc, xcenter)
+
+
+# %%
+def main(name):
+    G = nx.DiGraph()
+
+    logger = logging.getLogger(__name__)
+    logger.info("Start to build Graph")
+
+    #Root
+    root = 'Root'
+    inserted_nodes = 0
+
+    # Add root node
+    dict_nodes = {inserted_nodes: root}
+
+    dict_paths = {}
+
+    nodes_lvl1 = dict()
+    nodes_lvl2 = dict()
+    nodes_lvl3 = dict()
+    lvl_list = [nodes_lvl1, nodes_lvl2, nodes_lvl3]
+
+    G.add_node(0, attribute=root, lvl=0, predecessor=None)
+    inserted_nodes += 1
+
+    files = ["{}/{}_train.json".format(str(folder_path), name), "{}/{}_test.json".format(str(folder_path), name)]
+    
+    for file in files:
+        count = 0
+        with open(file, encoding='utf-8') as fp:
+            while True:
+                count += 1
+                line = fp.readline()
+
+                if not line:
+                    logger.info('Read {} lines from {}'.format(count, file))
+                    logger.info('Added {} nodes'.format(inserted_nodes))
+                    break
+
+                json_line = json.loads(line)
+                # Create labels
+                    
+                lvl1 = json_line['lvl1'].replace(" ","_")
+                lvl2 = json_line['lvl2'].replace(" ","_")
+                lvl3 = json_line['lvl3'].replace(" ","_")
+
+                # Paths
+                nodes = [lvl1, lvl2, lvl3]
+
+                if nodes not in dict_paths.values():
+                    dict_paths[inserted_nodes] = nodes
+                    inserted_nodes += 1
+                
+
+    # create nodes based on each existing path
+    inserted = 1
+    for path in dict_paths.values():
+        for i in range(3):
+            if i == 0:
+                predecessor = 0
+            else:
+                check = lvl_list[i-1]
+                predecessor = [node[0] for node in check.items() if node[1] == path[i-1]][0]
+
+            if path[i] not in lvl_list[i].values() or i == 2: #leaf nodes are allowed to have multiple nodes
+                dict_nodes[inserted] = path[i]
+                lvl_list[i][inserted] = path[i]
+                G.add_node(inserted, attribute=dict_nodes[inserted], lvl=i+1, predecessor=predecessor)
+                G.add_edge(predecessor, inserted)
+                inserted += 1
+
+    logger.info('Done: Total of {} nodes'.format(len(G.nodes(data=True))))
+    plt.figure(figsize=(10,5))
+
+    pos = hierarchy_pos(G,0)    
+    nx.draw(G, pos=pos, with_labels=True, font_size = 8)
+    plt.savefig(output_path.joinpath(f'hierarchy_{name}.png'))
+
+    # Save tree
+    with open(output_path.joinpath(f'tree_{name}.pkl'), "wb") as file:
+        pickle.dump(G, file=file)
+
+# %%
+if __name__ == '__main__':
+    log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
+
+    #main(name='blurbs_lvl3')
+    #main(name='blurbs_reduced')
 
 # %%

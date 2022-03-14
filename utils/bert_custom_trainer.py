@@ -2,6 +2,49 @@ import torch
 from transformers import Trainer
 from torch import nn
 
+from utils.loss_network import HierarchicalLossNetwork
+from utils.tree_utils import TreeUtils
+from utils.configuration import yaml_dump_for_notebook
+
+class TrainerLossNetwork(Trainer):
+    """
+    Creates a custom Trainer class inheriting from transformers Trainer
+    Computes dependency loss and layer loss
+    ( based on "Deep Hierarchical Classification for Category Prediction in E-commerce System 2020" paper)
+
+    Args:
+        Takes all arguments used in the Huggingface Trainer class
+        refer to https://huggingface.co/transformers/main_classes/trainer.html#transformers.Trainer for documentation
+    """
+
+    def __init__(self, *args, **kwargs, ):
+        super().__init__(*args, **kwargs)
+        self.args_dict = yaml_dump_for_notebook(filepath='configs/hierarchical-baseline.yml')
+
+        self.tree_utils = TreeUtils(self.args_dict['data_folder'], self.args_dict['data_file'])
+        self.tree = self.tree_utils.tree
+
+        self.normalized_decoder = self.tree_utils.encoding(only_decoder=True)
+
+        self.HLN = HierarchicalLossNetwork(tree=self.tree, decoder=self.normalized_decoder, device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu'))
+
+
+    def compute_loss(
+        self, model: nn.Module, inputs: torch.Tensor, return_outputs=False
+    ):
+
+        labels = inputs['labels']
+        outputs = model(**inputs)
+        logits = outputs.logits
+        transposed_labels = torch.transpose(labels, 0, 1)
+        
+        dloss = self.HLN.calculate_dloss(logits, transposed_labels)
+        lloss = self.HLN.calculate_lloss(logits, transposed_labels)
+
+        total_loss = lloss + dloss 
+
+        return (total_loss, outputs) if return_outputs else total_loss
+
 
 class SelfAdjDiceLoss(torch.nn.Module):
     """

@@ -30,11 +30,8 @@ then
     echo "..deleted"
     
     #execute python script to get datasets as json files
-    echo "..executing dataset script"
+    echo "..executing dataset script; builds training and test dataset plus graph"
     python utils/dataset.py
-
-    echo "..executing building tree script"
-    python utils/build_tree_from_dataset.py
     
     echo "..done"
 fi

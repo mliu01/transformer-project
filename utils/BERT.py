@@ -1,16 +1,11 @@
 import torch.nn as nn
 from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    AutoModelForTokenClassification,
     AutoConfig,
     set_seed,
 )
-from HierarchicalClassificationHead import ClassificationModel
+from utils.category_dataset import CategoryDatasetHierarchy
+from utils.model_runner import provide_model_and_tokenizer
 from utils.tree_utils import TreeUtils
-from utils.category_dataset_flat import CategoryDatasetFlat
-from pathlib import Path
-import pickle
 
 class BERT(nn.Module):
     def __init__(
@@ -25,14 +20,12 @@ class BERT(nn.Module):
             num_labels (int, optional): number of labels. 1 for Regression. Default to 10 classes.
         """
         super().__init__()
-        self.data_name = args_dict['data_file']
         self.dataset = dataset
-        self.tree = None
-        self.root = None
-        self.load_tree(args_dict['data_folder'])      
+
+        self.tree_utils = TreeUtils(args_dict['data_folder'], args_dict['data_file']) 
 
         self.config, self.unused_kwargs = AutoConfig.from_pretrained(
-            args_dict['checkpoint_model'],
+            args_dict["checkpoint_model_or_path"],
             hidden_dropout_prob=args_dict['hidden_dropout_prob'],
             output_attentions=False,
             num_labels=num_labels,
@@ -40,102 +33,54 @@ class BERT(nn.Module):
             return_unused_kwargs=True,
         )
 
-        normalized_encoder, self.normalized_decoder, sorted_normalized_paths = self.intialize_hierarchy_paths()
+        if args_dict["task_type"] and args_dict["checkpoint_model_or_path"]:
+            if args_dict["task_type"] == "hierarchical-classification" or args_dict["task_type"] == "rnn-hierarchical-classification":
+                encoder, self.decoder, normalized_encoder, self.normalized_decoder, number_of_labels, num_labels_per_lvl = self.tree_utils.encoding()
+                self.config.num_labels = number_of_labels
+                self.config.num_labels_per_lvl = num_labels_per_lvl
 
-        self.config.num_labels_per_lvl = self.tree_utils.get_number_of_nodes_lvl()
-        self.config.paths = sorted_normalized_paths
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            args_dict["checkpoint_tokenizer"], use_fast=True, model_max_length=512
-        )
+                tf_ds = {}
+                for key in self.dataset:
+                    tf_ds[key] = CategoryDatasetHierarchy(self.dataset[key], encoder, self.decoder, normalized_encoder)
+                self.dataset = tf_ds
 
-        if args_dict["task_type"] == "hierarchical-classification":
-            self.model = ClassificationModel(self.config, args_dict["task_type"])
-            tf_ds = {}
-            for key in self.dataset:
-                tf_ds[key] = CategoryDatasetFlat(self.dataset[key], normalized_encoder)
-            self.dataset = tf_ds
+            elif args_dict["task_type"] == "lcpn-hierarchical-classification":
+                raise Exception(
+                    "LCPN-Hierarchical-Classification doesn't work properly for now. Needs debug."
+                )
 
-        elif args_dict["task_type"] == "flat-classification":
-            self.model = ClassificationModel(self.config, args_dict["task_type"])
-        elif args_dict["task_type"] == "classification":
-            self.model = AutoModelForSequenceClassification.from_config(self.config)
-        elif args_dict["task_type"] == "NER":
-            self.model = AutoModelForTokenClassification.from_config(self.config)
-        
+            self.tokenizer, self.model = provide_model_and_tokenizer(args_dict["task_type"], args_dict["checkpoint_model_or_path"], self.config)
         else:
             raise Exception(
                 "Task unknown. Add the new task or use a kown model ('classification', 'NER')"
             )
-        
+
         self.model.to(args_dict['device'])
 
         if args_dict["freeze_layer"]:
-            self.freeze(args_dict["freeze_layer"], model_typ=args_dict["architecture"])
+            self.freeze(args_dict["freeze_layer"], model_typ=args_dict["architecture"], task_type=args_dict["task_type"])
 
-    def load_tree(self, path):
-        data_dir = Path(path)
-        path_to_tree = data_dir.joinpath('tree_{}.pkl'.format(self.data_name))
 
-        with open(path_to_tree, 'rb') as f:
-            self.tree = pickle.load(f)
-
-        self.root = [node[0] for node in self.tree.in_degree if node[1] == 0][0]
-        self.tree_utils = TreeUtils(self.tree)
-
-    def intialize_hierarchy_paths(self):
-        """initialize paths using the provided tree"""
-        decoder = dict(self.tree.nodes(data="attribute"))
-        encoder = dict([(value, key) for key, value in decoder.items()])
-
-        leaf_nodes = [node[0] for node in self.tree.out_degree if node[1] == 0]
-        paths = [self.tree_utils.determine_path_to_root([node]) for node in leaf_nodes]
-
-        # Normalize paths per level in hierarchy - currently the nodes are of increasing number throughout the tree.
-        normalized_paths = [self.tree_utils.normalize_path_from_root_per_level(path) for path in paths]
-
-        normalized_encoder = {'Root': {'original_key': 0, 'derived_key': 0}}
-        normalized_decoder = { 0: {'original_key': 0, 'value': 'Root'}}
-
-        #initiaize encoders
-        for path, normalized_path in zip(paths, normalized_paths):
-            key = path[-1]
-            derived_key = normalized_path[-1]
-            if key in leaf_nodes:
-                normalized_encoder[decoder[key]] = {'original_key': key, 'derived_key': derived_key}
-                normalized_decoder[derived_key] = {'original_key': key, 'value': decoder[key]}
-
-        oov_path = [[0, 0, 0]]
-        normalized_paths = oov_path + normalized_paths
-
-        # Sort paths ascending
-        sorted_normalized_paths = []
-        for i in range(len(normalized_paths)):
-            found_path = normalized_paths[0]
-            for path in normalized_paths:
-                for found_node, node in zip(found_path,path):
-                    if found_node > node:
-                        found_path = path
-                        break
-
-            if not (found_path is None):
-                sorted_normalized_paths.append(found_path)
-                normalized_paths.remove(found_path)
-
-        return normalized_encoder, normalized_decoder, sorted_normalized_paths
-
-    def freeze(self, n_freeze_layer: int, model_typ: str = "roberta"):
+    def freeze(self, n_freeze_layer: int, model_typ: str = "roberta", task_type="flat-classification"):
         """freezes the layer of the bert model and adds a unfrozen classifier at the end
         """
         # TODO: work in model.named_modules() to get all layers and make this code architecture independet
 
         # This if statement catches the different namings of layers in the model architecture 
+        model_arc_full = False
         if model_typ == "roberta":
-            model_arc = self.model.roberta
-            model_arc_full = self.model
+            if task_type == "hierarchical-classification":
+                model_arc = self.model.model
+                model_arc_full = self.model
+            else:
+                model_arc = self.model.roberta
 
         elif model_typ == "bert":
-            model_arc = self.model.bert
+            if task_type == "hierarchical-classification":
+                model_arc = self.model.model
+                model_arc_full = self.model
+            else:
+                model_arc = self.model.bert
 
         elif model_typ == "distilbert":
             model_arc = self.model.distilbert
@@ -177,8 +122,8 @@ class BERT(nn.Module):
         return self.dataset['train'], self.dataset['valid'], self.dataset['test']
         
     def get_tree(self):
-        return self.tree
+        return self.tree_utils.tree
 
-    def get_decoder(self):
-        return self.normalized_decoder
+    def get_decoders(self):
+        return self.decoder, self.normalized_decoder
 

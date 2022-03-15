@@ -4,7 +4,6 @@ import torch.nn as nn
 from transformers import AutoModel
 from transformers.modeling_outputs import SequenceClassifierOutput
 from transformers.modeling_utils import PreTrainedModel
-import networkx as nx
 
 
 # %%
@@ -17,7 +16,7 @@ class HierarchicalClassificationModel(PreTrainedModel):
         super().__init__(config)
         self.config = config
         
-        self.model = AutoModel.from_config(self.config, add_pooling_layer=False)
+        self.model = AutoModel.from_config(self.config)
         self.classifier = HierarchicalClassificationHead(self.config)
 
         self.model.init_weights()      
@@ -58,8 +57,8 @@ class HierarchicalClassificationModel(PreTrainedModel):
         
         loss = None
 
-        hidden = self.classifier.initHidden(len(labels))
-        lvl1, lvl2, lvl3 = self.classifier(sequence_output, hidden)
+        #hidden = self.classifier.initHidden(len(labels))
+        lvl1, lvl2, lvl3 = self.classifier(sequence_output)
         logits = [lvl1, lvl2, lvl3]
 
         if not return_dict:
@@ -81,11 +80,13 @@ class HierarchicalClassificationHead(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_labels_per_lvl = config.num_labels_per_lvl
 
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.linear_lvl1 = nn.Linear(config.hidden_size + config.hidden_size, self.num_labels_per_lvl[0])
-        self.linear_lvl2 = nn.Linear(config.hidden_size + config.hidden_size, self.num_labels_per_lvl[1])
-        self.linear_lvl3 = nn.Linear(config.hidden_size + config.hidden_size, self.num_labels_per_lvl[2])
+        self.linear_lvl1 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[0])
+        self.linear_lvl2 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[1])
+        self.linear_lvl3 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[2])
 
         self.softmax_reg1 = nn.Linear(self.num_labels_per_lvl[0], self.num_labels_per_lvl[0])
         self.softmax_reg2 = nn.Linear(self.num_labels_per_lvl[0] + self.num_labels_per_lvl[1], self.num_labels_per_lvl[1])
@@ -93,10 +94,13 @@ class HierarchicalClassificationHead(nn.Module):
 
 
 
-    def forward(self, input, hidden):
-        combined = torch.cat((input, hidden), 1)
-        combined = torch.tanh(combined)
-        x = self.dropout(combined)
+    def forward(self, input):
+        #combined = torch.cat((input, hidden), 1)
+        #combined = torch.tanh(combined)
+        x = self.dense(input)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        
 
         level_1 = self.softmax_reg1(self.linear_lvl1(x))
         level_2 = self.softmax_reg2(torch.cat([level_1, self.linear_lvl2(x)], dim=1))

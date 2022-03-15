@@ -7,7 +7,7 @@ class HierarchicalLossNetwork:
     '''Logics to calculate the loss of the model.
     '''
 
-    def __init__(self, tree, decoder, device='cpu', total_level=3, alpha=1, beta=0.8, p_loss=3):
+    def __init__(self, hierarchy, encoder, device='cpu', total_level=3, alpha=1, beta=0.8, p_loss=3):
         '''Param init.
         '''
         self.total_level = total_level
@@ -15,29 +15,22 @@ class HierarchicalLossNetwork:
         self.beta = beta
         self.p_loss = p_loss
         self.device = device
-        self.decoder = decoder
-        self.tree = tree
-        self.numeric_hierarchy = self.successors_per_node()
 
-    def successors_per_node(self):
-        '''Creates dictionary with every node and their child nodes
-        '''#
-
-        ## TODO: decode derived key 
-        numeric_hierarchy = {}
-        for i in self.tree.nodes():
-            numeric_hierarchy[i] = list(self.tree.successors(i))
-
-        return numeric_hierarchy
+        self.encoder = encoder
+        self.hierarchy = hierarchy
 
 
     def check_hierarchy(self, current_level, previous_level, lvl): 
         '''Check if the predicted class at level l is a children of the class predicted at level l-1 for the entire batch.
         '''
-        current_level = [self.decoder[lvl+1][i.item()] if i.item() in self.decoder[lvl+1] else False for i in current_level]
-        #check using the dictionary whether the current level's prediction belongs to the superclass (prediction from the prev layer)
-        bool_tensor = [not current_level[i] in self.numeric_hierarchy[self.decoder[lvl][previous_level[i].item()]] if previous_level[i].item() in self.decoder[lvl] else True
-            for i in range(previous_level.size()[0])]
+
+        all_paths = [list(i) for i in self.hierarchy]
+
+        prev = self.encoder[lvl-1].inverse_transform([i.item() for i in previous_level])
+        curr = self.encoder[lvl].inverse_transform([i.item() for i in current_level])
+
+        # looks thorugh each path and checks whether current pred is in the hierarchy of the previous pred
+        bool_tensor = [not curr[i] in [path[lvl] for path in all_paths if path[lvl-1] ==prev[i]] for i in range(previous_level.size()[0])]
 
         return torch.FloatTensor(bool_tensor).to(self.device)
 

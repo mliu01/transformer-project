@@ -25,6 +25,9 @@ CV_NUM = 3
 current_directory = os.getcwd()
 print(current_directory)
 
+# TODO: create hierarchy file with dict or json of blurbs s. https://gitlab.com/vumaasha/germeval/-/blob/master/notebooks/PlayGround.ipynb
+# and https://gitlab.com/vumaasha/germeval/-/blob/master/germeval/hierarchy.py 
+
 
 # %%
 def load_data(directory, status):
@@ -128,9 +131,11 @@ test_data = load_data(test_file, 'train')
 # all entries
 df = pd.concat([pd.DataFrame(train_data), pd.DataFrame(dev_data), pd.DataFrame(test_data)])
 
-
 # %%
-#df
+df_train = pd.DataFrame(train_data)
+df_dev = pd.DataFrame(dev_data)
+df_test = pd.DataFrame(test_data)
+
 
 # %%
 def format_df(df, level=None):
@@ -167,6 +172,7 @@ def full_dataset(level=None):
     if level:
         logger.info(f"Building datasets with hierarchy level: {level}")
         df_full_lvl = format_df(df, level)
+        df_full_lvl = df_full_lvl.dropna()
         logger.info(f"Initial dataset with {level} hierarchy level/s length: {len(df_full_lvl)}") 
 
         new_ds_name = f"{ds_name}_lvl{level}_full.json"
@@ -182,11 +188,11 @@ def full_dataset(level=None):
     return new_ds_name #return new ds names 
 
 # %%
-def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOcc=50, split=0.85):
+def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOcc=100, split=0.85):
     logger = logging.getLogger(__name__)
     logger.info(f"Building datasets with at least {minOcc} entries")
 
-    df = pd.read_json(folder_path.joinpath(ds_file), orient='records', lines=True)
+    df = pd.read_json(output_path.joinpath(ds_file), orient='records', lines=True)
     df = df.dropna()
 
     # each path has to occur at least minOcc times
@@ -196,8 +202,9 @@ def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOc
     df = df.groupby(df['label'].map(tuple)).filter(lambda x : len(x)>=minOcc)
 
     logger.info(f"Finished dataset length: {len(df)}")
+    df.to_json(output_path.joinpath(f"{out_prefix}_full.json"), orient = "records", lines=True, force_ascii=False)
 
-    # split into train and test dataset
+    #split into train and test dataset
     train_data = df.sample(frac=split)
     test_data = df.drop(train_data.index)
 
@@ -216,8 +223,8 @@ if __name__ == '__main__':
 
     lvl_ds = full_dataset(level=3) # complete dataset with hierarchy level 3, returns new files name
     
-    extra_processing(ds_file=lvl_ds, out_prefix='blurbs_lvl3', minOcc = )
-    #extra_processing(ds_file="./blurbs_dataset/blurbs_lvl3_full.json", out_prefix='blurbs_reduced', minOcc=200)
+    #extra_processing(ds_file=lvl_ds, out_prefix='blurbs_lvl3', minOcc = 50)
+    extra_processing(ds_file=lvl_ds, out_prefix='blurbs_reduced', minOcc=100)
 
 
 # %% [markdown]

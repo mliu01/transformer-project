@@ -9,7 +9,7 @@ from utils.tree_utils import TreeUtils
 
 class BERT(nn.Module):
     def __init__(
-        self, args_dict: dict, device: str = "cuda", num_labels: int = 10, dataset=None, dataset_full=None
+        self, args_dict: dict, device: str = "cuda", num_labels: int = 10, num_labels_per_lvl=None
     ):
         """Loads the model and freezes the layers
 
@@ -20,9 +20,6 @@ class BERT(nn.Module):
             num_labels (int, optional): number of labels. 1 for Regression. Default to 10 classes.
         """
         super().__init__()
-        self.dataset = dataset
-
-        self.tree_utils = TreeUtils(args_dict['data_folder'], args_dict['data_file']) 
 
         self.config, self.unused_kwargs = AutoConfig.from_pretrained(
             args_dict["checkpoint_model_or_path"],
@@ -35,19 +32,13 @@ class BERT(nn.Module):
 
         if args_dict["task_type"] and args_dict["checkpoint_model_or_path"]:
             if args_dict["task_type"] == "hierarchical-classification" or args_dict["task_type"] == "rnn-hierarchical-classification":
-                encoder, self.decoder, normalized_encoder, self.normalized_decoder, number_of_labels, num_labels_per_lvl = self.tree_utils.encoding()
-                self.config.num_labels = number_of_labels
+                self.config.num_labels = num_labels
                 self.config.num_labels_per_lvl = num_labels_per_lvl
-
-                tf_ds = {}
-                for key in self.dataset:
-                    tf_ds[key] = CategoryDatasetHierarchy(self.dataset[key], encoder, self.decoder, normalized_encoder)
-                self.dataset = tf_ds
 
             elif args_dict["task_type"] == "lcpn-hierarchical-classification":
                 raise Exception(
                     "LCPN-Hierarchical-Classification doesn't work properly for now. Needs debug."
-                )
+                    )
 
             self.tokenizer, self.model = provide_model_and_tokenizer(args_dict["task_type"], args_dict["checkpoint_model_or_path"], self.config)
         else:
@@ -117,12 +108,3 @@ class BERT(nn.Module):
             for k, v in model_arc.named_parameters():
                 if v.requires_grad:
                     print("{}: {}".format(k, v.requires_grad)) # Prints a list of all layers that can still be trained after freezing
-
-    def get_datasets(self):
-        return self.dataset
-        
-    def get_tree(self):
-        return self.tree_utils.tree
-
-    def get_decoders(self):
-        return self.decoder, self.normalized_decoder

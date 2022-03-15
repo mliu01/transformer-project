@@ -36,19 +36,19 @@ metric_used: "h_f1"
 drop_last: False
 
 #try to get batch_size as high as possible
-batch_size: 24
+batch_size: 48
 gradient_accumulation_steps: 1
 # Learning Rate, 1e-05
 lr_rate: 5e-05
 #5.0e-1 = 0.5
-weight_decay: 0.6
+weight_decay: 0.8
 # Warm up for the learning rate
 warm_up: 0.1
 lr_scheduler_type: "linear"
 epochs: 20
 oversampling: 0.1
 # Number of layers in the pretrained model to not train
-freeze_layer: 10
+freeze_layer: 11
 label_smoothing: 0
 hidden_dropout_prob: 0.1 #default: 0.1
 # Custom Trainer

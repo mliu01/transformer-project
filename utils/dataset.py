@@ -13,7 +13,6 @@
 # %% endofcell="--"
 from os.path import join
 import os
-import numpy as np
 import string
 from bs4 import BeautifulSoup
 punctuations = string.punctuation

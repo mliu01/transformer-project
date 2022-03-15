@@ -1,12 +1,12 @@
 # %% [markdown]
 # # MAKI4U Jumpstart Notebook
-#
+# 
 # A Notebook for training new BERT models for MAKI4U (former CCAI)\
 # This is a refactored version of "bert_train_classifier.ipynb" from the
 # BAS Jumpstart\ and is meant as optimization and general clean up of that notebook\
 # It is possible to use this as notebook or directly as a script
-#
-#
+# 
+# 
 # This notebook is organized in
 # * [Configuration for Model and Logging](#config)
 # * [Loading Dataset](#dataset)
@@ -17,8 +17,8 @@
 # ## Imports
 
 # %%
-# %load_ext autoreload
-# %autoreload 2
+#%load_ext autoreload
+#%autoreload 2
 
 # %%
 import time
@@ -36,7 +36,6 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sn
 
 from IPython import get_ipython
-import torch
 from torch.utils.tensorboard import SummaryWriter
 from datasets import load_dataset, DatasetDict, Dataset
 import transformers
@@ -49,7 +48,6 @@ from transformers import (
     EarlyStoppingCallback
 )
 from transformers.utils import check_min_version
-import yaml
 from utils.bert_custom_trainer import TrainerLossNetwork, TrainerDiceLoss
 from utils.configuration import (
     parse_arguments,
@@ -61,6 +59,7 @@ from utils.metrics import Metrics
 from utils import scorer
 from utils.BERT import BERT
 from utils.result_collector import ResultCollector
+from utils.custom_dataset_encoding import CustomDS
 
 # %%
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -79,7 +78,7 @@ get_ipython().run_line_magic("matplotlib", "inline")
 block_size_10MB = 10 << 20
 
 # %%
-args_dict = yaml_dump_for_notebook(filepath='configs/bert-hierarchical-baseline.yml')
+args_dict = yaml_dump_for_notebook(filepath='configs/hierarchical-baseline.yml')
 
 # %%
 filename, filepath = save_config(args_dict)
@@ -110,11 +109,16 @@ if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 
 
 elif args_dict['task_type'] == 'hierarchical-classification':
     if 'path_list' in dataset_full.column_names:
-        dataset_full = dataset_full.remove_columns("label")
-        dataset_full = dataset_full.rename_column("path_list", "label")
+
+        #encoding
+        dataset_full = dataset_full.rename_column("label", "leaf_label")
+
+        ds_object = CustomDS(dataset_full)
+        dataset_full = ds_object.get_encoded_dataset()
+
 
 # removes unnecessary columns
-rmv_col = [col for col in dataset_full.column_names if col not in ['label', 'text']]
+rmv_col = [col for col in dataset_full.column_names if col not in ['label', 'leaf_label', 'text']]
 dataset_full = dataset_full.remove_columns(rmv_col)
 dataset_full
 
@@ -146,32 +150,36 @@ dataset = DatasetDict(
 )
 
 if args_dict["oversampling"]:
-    target_names = np.unique(dataset["test"]["label"])
+    target_names = np.unique(dataset["test"]["leaf_label"])
     df_train = dataset["train"].to_pandas()
     min_samples = math.ceil(len(df_train) * args_dict["oversampling"])
-    count_dict = dict(df_train["label"].value_counts())
+    count_dict = dict(df_train["leaf_label"].value_counts())
     count_dict = {k: v for k, v in count_dict.items() if v < min_samples}
 
     over_samples = []
     for label_id, n_occurance in count_dict.items():
-        class_samples = df_train[df_train["label"] == label_id]
+        class_samples = df_train[df_train["leaf_label"] == label_id]
         additional_samples = class_samples.sample(
             n=(min_samples - len(class_samples)), replace=True
         )
         over_samples.append(additional_samples)
         print(
-            f"\nAdding {len(additional_samples)} samples for class {target_names[label_id]}"
+            f"\nAdding {len(additional_samples)} samples for class {label_id}"
         )
 
     new_train = pd.concat([df_train, *over_samples])
     dataset["train"] = Dataset.from_pandas(new_train)
 
 dataset["train"] = dataset["train"].shuffle(seed=args_dict["random_seed"])
-num_labels = len(set([tuple(label) for label in dataset['test']["label"]]))
 
-# assert (
-#     set([tuple(label) for label in dataset['train']["label"]]) == set([tuple(label) for label in dataset['test']["label"]])
-# ), "Something went wrong, target_names of train and test should be the same"
+# %%
+from utils.custom_dataset_encoding import load_encoder
+encoder = load_encoder()
+num_labels = len(encoder[2].classes_)
+num_lables_per_lvl = {i: len(encoder[i].classes_) for i in range(len(encoder))}
+
+# %%
+num_lables_per_lvl
 
 # %% [markdown]
 # ## Model Definition <a class="anchor" id="model"></a>
@@ -179,17 +187,7 @@ num_labels = len(set([tuple(label) for label in dataset['test']["label"]]))
 # %%
 # Model class definition 
 model_obj = BERT(
-    args_dict, num_labels=num_labels, dataset = dataset
-)
-
-# %%
-dataset_encoded = model_obj.get_datasets()
-dataset = DatasetDict(
-{
-    "train": dataset_encoded['train'],
-    "valid": dataset_encoded['valid'],
-    "test": dataset_encoded['test']
-}
+    args_dict, num_labels=num_labels, num_labels_per_lvl=num_lables_per_lvl
 )
 
 # %%
@@ -238,12 +236,10 @@ if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 
     evaluator = Metrics(dataset_full.features['label'].names).compute_metrics
 
 elif args_dict['task_type'] == 'hierarchical-classification':
-    decoder, normalized_decoder = model_obj.get_decoders()
-    evaluator = scorer.HierarchicalScorer(args_dict['experiment_name'], model_obj.get_tree(), normalized_decoder)
-    evaluator = evaluator.compute_metrics_transformers_hierarchy
+    evaluator = scorer.HierarchicalScorer(args_dict['experiment_name']).compute_metrics
 
     assert (
-        all(len(elem)==3 for elem in dataset['train'].labels)
+        all(len(elem)==3 for elem in dataset['train']['label'])
     ), "Something went wrong during encoding, all labels should have length of 3 (ignore if hierarchy level is not 3)"
 
 # %%
@@ -259,7 +255,7 @@ trainer = trainer_class(
 )
 
 # %%
-set([tuple(label) for label in dataset['train'].labels]) #should be normalized! cross entropy loss won't work otherwise
+#dataset['train']['label']
 
 # %%
 trainer.train(resume_from_checkpoint=args_dict['resume_from_checkpoint'])
@@ -267,9 +263,10 @@ trainer.train(resume_from_checkpoint=args_dict['resume_from_checkpoint'])
 # %%
 # Add to saving from here
 Path(f"{filename}/models").mkdir(parents=True, exist_ok=True)
+result_collector = ResultCollector(args_dict['data_file'], filename)  
 
 # %%
-result_collector = ResultCollector(args_dict['data_file'], filename)  
+#result_collector = ResultCollector(args_dict['data_file'], filename)  
 for split in ['train', 'valid', 'test']:
     result_collector.results['{}+{}'.format(args_dict['experiment_name'], split)] \
         = trainer.evaluate(dataset[split])
@@ -296,15 +293,11 @@ prediction = trainer.predict(dataset['test'])
 #if args_dict['task_type'] == 'hierarchical-classification':
 preds =  np.array(np.array([list(pred.argmax(-1)) for pred in prediction.predictions]).transpose().tolist())
 
-#TODO: hardcoded for 3 levels
-#labels + prediction are normalized, to get original path/label name use normalized_decoder first and then the decoder (just like below)
-
 label_list = []
 predcition_list = []
 for i in range(3):
-     # normalized decoder: from derived_key to original key; decoder: from original_key to label name
-     label_list.append([decoder[i+1][normalized_decoder[i+1][label]]['name'] for label in prediction.label_ids[:, i]])
-     predcition_list.append([decoder[i+1][normalized_decoder[i+1][prediction]]['name'] for prediction in preds[:, i]])
+     label_list.append([encoder[i].inverse_transform([label]) for label in prediction.label_ids[:, i]])
+     predcition_list.append([encoder[i].inverse_transform([prediction]) for prediction in preds[:, i]])
 
 test_pred=pd.DataFrame(data={
 "label_lvl1": label_list[0] ,"prediction_lvl1": predcition_list[0], 
@@ -391,4 +384,4 @@ model_obj.model.save_pretrained(f"{filename}/pretrained")
 model_obj.tokenizer.save_pretrained(f"{filename}/pretrained")
 
 # %%
-#TODO: CLEAN UP CODE, a lot is still hard coded for 3 hierarchy levels
+#TODO: CLEAN UP CODE

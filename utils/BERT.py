@@ -3,9 +3,7 @@ from transformers import (
     AutoConfig,
     set_seed,
 )
-from utils.category_dataset import CategoryDatasetHierarchy
 from utils.model_runner import provide_model_and_tokenizer
-from utils.tree_utils import TreeUtils
 
 class BERT(nn.Module):
     def __init__(
@@ -37,7 +35,7 @@ class BERT(nn.Module):
 
             elif args_dict["task_type"] == "lcpn-hierarchical-classification":
                 raise Exception(
-                    "LCPN-Hierarchical-Classification doesn't work properly for now. Needs debug."
+                    "LCPN-Hierarchical-Classification doesn't work properly for now. Needs debug (or remove)."
                     )
 
             self.tokenizer, self.model = provide_model_and_tokenizer(args_dict["task_type"], args_dict["checkpoint_model_or_path"], self.config)

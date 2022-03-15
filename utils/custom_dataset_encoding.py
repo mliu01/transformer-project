@@ -3,6 +3,7 @@ from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import pickle
 from pathlib import Path
+import logging
 # %%
 class CustomDS():
     def __init__(self, dataset):
@@ -19,6 +20,8 @@ class CustomDS():
         To make sure that during that loss is calculated properly, one encoder for each level is used 
         and saved as a NumPy array file (serializable) that can be used troughout the project.
         '''
+        self.logger = logging.getLogger(__name__)
+
         self.dataset = dataset
         self.encoder = None
         self.path = Path(f"./data/encoding")

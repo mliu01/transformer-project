@@ -95,8 +95,6 @@ class HierarchicalClassificationHead(nn.Module):
 
 
     def forward(self, input):
-        #combined = torch.cat((input, hidden), 1)
-        #combined = torch.tanh(combined)
         x = self.dense(input)
         x = torch.tanh(x)
         x = self.dropout(x)

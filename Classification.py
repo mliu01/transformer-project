@@ -382,6 +382,3 @@ print("done... saving model")
 trainer.save_model(f"{filename}/models")
 model_obj.model.save_pretrained(f"{filename}/pretrained")
 model_obj.tokenizer.save_pretrained(f"{filename}/pretrained")
-
-# %%
-#TODO: CLEAN UP CODE

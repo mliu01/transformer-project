@@ -16,7 +16,7 @@ class HierarchicalClassificationModel(PreTrainedModel):
         super().__init__(config)
         self.config = config
         
-        self.model = AutoModel.from_config(self.config)
+        self.model = AutoModel.from_config(self.config, add_pooling_layer=False)
         self.classifier = HierarchicalClassificationHead(self.config)
 
         self.model.init_weights()      

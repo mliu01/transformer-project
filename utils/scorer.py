@@ -77,7 +77,7 @@ class HierarchicalScorer:
         # flat scores for each hierarchy level
         for labels_lvl, preds_lvl in zip(labels_per_lvl, preds_per_lvl):
 
-            counter += 1
+            lvl_counter += 1
             labels_lvl = [value for value in labels_lvl if value != -1]
             preds_lvl = [value for value in preds_lvl if value != -1]
 

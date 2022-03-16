@@ -12,48 +12,48 @@
 # * [Model Definition](#model)
 
 # %% [markdown]
-# ## Imports
+## Imports
+
+%%
+# For Testing Purpose to have a larger dataset
+! wget http://noisy-text.github.io/2017/files/wnut17train.conll
 
 # %%
-# # For Testing Purpose to have a larger dataset
-# ! wget http://noisy-text.github.io/2017/files/wnut17train.conll
+#!pip install wandb -qqq
+import wandb
 
-# # %%
-# #!pip install wandb -qqq
-# import wandb
+wandb.login(relogin=False)
 
-# wandb.login(relogin=False)
+# %%
+import sys
 
-# # %%
-# import sys
+from IPython import get_ipython
+import torch
+import transformers
+from transformers import (
+    TrainingArguments,
+    Trainer,
+    set_seed,
+)
+from transformers.utils import check_min_version
+import yaml
+import numpy as np
+from sklearn.model_selection import train_test_split
+from pathlib import Path
+from typing import List, Set, Dict, Tuple, Optional
 
-# from IPython import get_ipython
-# import torch
-# import transformers
-# from transformers import (
-#     TrainingArguments,
-#     Trainer,
-#     set_seed,
-# )
-# from transformers.utils import check_min_version
-# import yaml
-# import numpy as np
-# from sklearn.model_selection import train_test_split
-# from pathlib import Path
-# from typing import List, Set, Dict, Tuple, Optional
-
-# # %%
-# from utils.bert_custom_trainer import TrainerDiceLoss
-# from utils.configuration import (
-#     parse_arguments,
-#     save_config,
-#     yaml_dump_for_notebook,
-#     isnotebook,
-# )
-# import utils.metrics
-# from utils.dataset import prep_conll_file, load_data
-# from utils.BERT import BERT
-# from utils.metrics import compute_metrics
+# %%
+from utils.bert_custom_trainer import TrainerDiceLoss
+from utils.configuration import (
+    parse_arguments,
+    save_config,
+    yaml_dump_for_notebook,
+    isnotebook,
+)
+import utils.metrics
+from utils.dataset import prep_conll_file, load_data
+from utils.BERT import BERT
+from utils.metrics import compute_metrics
 
 # %%
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

@@ -17,8 +17,8 @@
 # ## Imports
 
 # %%
-#%load_ext autoreload
-#%autoreload 2
+%load_ext autoreload
+%autoreload 2
 
 # %%
 import time
@@ -291,13 +291,14 @@ prediction = trainer.predict(dataset['test'])
 
 # %%
 #if args_dict['task_type'] == 'hierarchical-classification':
-preds =  np.array(np.array([list(pred.argmax(-1)) for pred in prediction.predictions]).transpose().tolist())
+preds =  np.array([list(pred.argmax(-1)) for pred in prediction.predictions]).tolist()
+labels = np.array(prediction.label_ids).transpose().tolist()
 
 label_list = []
 predcition_list = []
 for i in range(3):
-     label_list.append([encoder[i].inverse_transform([label]) for label in prediction.label_ids[:, i]])
-     predcition_list.append([encoder[i].inverse_transform([prediction]) for prediction in preds[:, i]])
+     label_list.append([list(encoder[i].inverse_transform([label]))[0] for label in labels[i]])
+     predcition_list.append([list(encoder[i].inverse_transform([prediction]))[0] for prediction in preds[i]])
 
 test_pred=pd.DataFrame(data={
 "label_lvl1": label_list[0] ,"prediction_lvl1": predcition_list[0], 

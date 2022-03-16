@@ -195,10 +195,10 @@ def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOc
     df = df.dropna()
 
     # each path has to occur at least minOcc times
-    #df = df.groupby(df['path_list'].map(tuple)).filter(lambda x : len(x)>=minOcc)
+    df = df.groupby(df['path_list'].map(tuple)).filter(lambda x : len(x)>=minOcc)
 
     # alternative: each label in last hierarchy level has to occur at least minOcc times
-    df = df.groupby(df['label'].map(tuple)).filter(lambda x : len(x)>=minOcc)
+    #df = df.groupby(df['label'].map(tuple)).filter(lambda x : len(x)>=minOcc)
 
     logger.info(f"Finished dataset length: {len(df)}")
     df.to_json(output_path.joinpath(f"{out_prefix}_full.json"), orient = "records", lines=True, force_ascii=False)

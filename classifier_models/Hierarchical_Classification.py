@@ -97,12 +97,15 @@ class HierarchicalClassificationHead(nn.Module):
     def forward(self, input):
         x = self.dense(input)
         x = torch.tanh(x)
-        x = self.dropout(x)
-        
+        x0 = self.dropout(x)
 
-        level_1 = self.softmax_reg1(self.linear_lvl1(x))
-        level_2 = self.softmax_reg2(torch.cat([level_1, self.linear_lvl2(x)], dim=1))
-        level_3 = self.softmax_reg3(torch.cat((level_2, self.linear_lvl3(x)), dim=1))
+        layer1_rep = nn.functional.relu(self.linear_lvl1(x0))
+        layer2_rep = nn.functional.relu(self.linear_lvl2(x0))
+        layer3_rep = nn.functional.relu(self.linear_lvl3(x0))
+
+        level_1 = self.softmax_reg1(layer1_rep)
+        level_2 = self.softmax_reg2(torch.cat((layer1_rep, layer2_rep), dim=1))
+        level_3 = self.softmax_reg3(torch.cat((layer2_rep, layer3_rep), dim=1))
 
         return level_1, level_2, level_3
 

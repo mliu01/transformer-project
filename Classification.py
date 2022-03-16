@@ -78,7 +78,7 @@ get_ipython().run_line_magic("matplotlib", "inline")
 block_size_10MB = 10 << 20
 
 # %%
-args_dict = yaml_dump_for_notebook(filepath='configs/hierarchical-baseline.yml')
+args_dict = yaml_dump_for_notebook(filepath='configs/flat-baseline.yml')
 
 # %%
 filename, filepath = save_config(args_dict)
@@ -150,15 +150,20 @@ dataset = DatasetDict(
 )
 
 if args_dict["oversampling"]:
-    target_names = np.unique(dataset["test"]["leaf_label"])
+    if 'leaf_label' in dataset_full.column_names:
+        label_name = "leaf_label"
+    else: 
+        label_name = "label"
+        
+    target_names = np.unique(dataset["test"][label_name])
     df_train = dataset["train"].to_pandas()
     min_samples = math.ceil(len(df_train) * args_dict["oversampling"])
-    count_dict = dict(df_train["leaf_label"].value_counts())
+    count_dict = dict(df_train[label_name].value_counts())
     count_dict = {k: v for k, v in count_dict.items() if v < min_samples}
 
     over_samples = []
     for label_id, n_occurance in count_dict.items():
-        class_samples = df_train[df_train["leaf_label"] == label_id]
+        class_samples = df_train[df_train[label_name] == label_id]
         additional_samples = class_samples.sample(
             n=(min_samples - len(class_samples)), replace=True
         )
@@ -273,9 +278,11 @@ for split in ['train', 'valid', 'test']:
 result_collector.persist_results(time.time())
 
 # %%
+prediction, labels, metrics = trainer.predict(dataset["test"])
+
+# %%
 if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'NER':
-     logits, labels, metrics = trainer.predict(dataset["test"])
-     predictions = logits.argmax(1)
+     predictions = prediction.argmax(1)
      
      report = classification_report(
         labels, 
@@ -283,99 +290,54 @@ if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 
         target_names= dataset['test'].features['label'].names #target_names
      )
      print(report)     
-     with open(f'{filename}/results/metrics.json', 'w') as metrics:
-          json.dump(report, metrics, indent=4)
+     with open(f'{filename}/results/metrics.json', 'w') as f:
+          json.dump(metrics, f, indent=4)
 
 # %%
-prediction = trainer.predict(dataset['test'])
+if args_dict['task_type'] == 'hierarchical-classification':
+     preds =  np.array([list(pred.argmax(-1)) for pred in prediction]).tolist()
+     labels = np.array(labels).transpose().tolist()
+
+     label_list = []
+     predcition_list = []
+     for i in range(3):
+          label_list.append([list(encoder[i].inverse_transform([label]))[0] for label in labels[i]])
+          predcition_list.append([list(encoder[i].inverse_transform([prediction]))[0] for prediction in preds[i]])
+
+     test_pred=pd.DataFrame(data={
+     "label_lvl1": label_list[0] ,"prediction_lvl1": predcition_list[0], 
+     "label_lvl2": label_list[1] ,"prediction_lvl2": predcition_list[1],
+     "label_lvl3": label_list[2] ,"prediction_lvl3": predcition_list[2]
+     }) 
+
+     assert (
+     len(dataset['test']) == len(test_pred)
+     ), "Something went wrong, length of test datasets should be the same"
+
+     full_prediction_output = '{}/{}.csv'.format(f"{filename}/results", "prediction-results")
+     test_pred.to_csv(full_prediction_output, index=False, sep=';', encoding='utf-8', quotechar='"',
+          quoting=csv.QUOTE_ALL)
+
+     with open(f'{filename}/results/metrics_test.json', 'w') as f:
+          json.dump(metrics, f, indent=4)
 
 # %%
-#if args_dict['task_type'] == 'hierarchical-classification':
-preds =  np.array([list(pred.argmax(-1)) for pred in prediction.predictions]).tolist()
-labels = np.array(prediction.label_ids).transpose().tolist()
+if args_dict['task_type'] == 'hierarchical-classification':
+    lvl = 0
+    for y_label, y_pred in zip(label_list, predcition_list):
+        log = classification_report(y_label, y_pred, output_dict = True)
 
-label_list = []
-predcition_list = []
-for i in range(3):
-     label_list.append([list(encoder[i].inverse_transform([label]))[0] for label in labels[i]])
-     predcition_list.append([list(encoder[i].inverse_transform([prediction]))[0] for prediction in preds[i]])
+        pd.DataFrame(log).to_csv(f'{filename}/results/classification_report{lvl+1}.csv', sep=';')
 
-test_pred=pd.DataFrame(data={
-"label_lvl1": label_list[0] ,"prediction_lvl1": predcition_list[0], 
-"label_lvl2": label_list[1] ,"prediction_lvl2": predcition_list[1],
-"label_lvl3": label_list[2] ,"prediction_lvl3": predcition_list[2]
-}) 
+        np.save(Path(f'{filename}/results/').joinpath(f"confusion_lvl{lvl+1}.npy"), confusion_matrix(y_label, y_pred))
 
-assert (
-len(dataset['test']) == len(test_pred)
-), "Something went wrong, length of test datasets should be the same"
+        array = np.load(Path(f'{filename}/results').joinpath(f"confusion_lvl{lvl+1}.npy"))
 
-full_prediction_output = '{}/{}.csv'.format(f"{filename}/results", "prediction-results")
-test_pred.to_csv(full_prediction_output, index=False, sep=';', encoding='utf-8', quotechar='"',
-     quoting=csv.QUOTE_ALL)
-
-# %%
-lvl = 1
-for label, prediction in zip(label_list, predcition_list):
-    np.save(Path(f'{filename}/results/').joinpath(f"confusion_lvl{lvl}.npy"), confusion_matrix(label, prediction))
-    lvl += 1
-
-# %%
-# results hierarchy level 1
-log1 = classification_report(
-        label_list[0], 
-        predcition_list[0],
-        output_dict = True
-    )
-#print(log1)
-with open(f'{filename}/results/classification_report1.json', 'w') as metrics:
-    json.dump(log1, metrics, indent=4)
-
-label = set(label_list[0])
-array = np.load(Path(f'{filename}/results').joinpath("confusion_lvl1.npy"))
-
-df_cm = pd.DataFrame(array, index = label,
-                  columns = label)
-plt.figure(figsize = (10,7))
-sn.heatmap(df_cm, annot=True)
-
-# %%
-# results hierarchy level 2
-log2 = classification_report(
-        label_list[1], 
-        predcition_list[1],
-        output_dict = True
-    )
-#print(log2)
-with open(f'{filename}/results/classification_report2.json', 'w') as metrics:
-    json.dump(log2, metrics, indent=4)
-
-label = set(label_list[1])
-array = np.load(Path(f'{filename}/results/').joinpath("confusion_lvl2.npy"))
-
-df_cm = pd.DataFrame(array, index = label,
-                  columns = label)
-plt.figure(figsize = (10,7))
-sn.heatmap(df_cm, annot=True)
-
-# %%
-# results hierarchy level 3
-log3 = classification_report(
-        label_list[2], 
-        predcition_list[2],
-        output_dict = True
-    )
-#print(log3)
-with open(f'{filename}/results/classification_report3.json', 'w') as metrics:
-    json.dump(log3, metrics, indent=4)
-
-label = set(label_list[2])
-array = np.load(Path(f'{filename}/results/').joinpath("confusion_lvl3.npy"))
-
-df_cm = pd.DataFrame(array, index = label,
-                  columns = label)
-plt.figure(figsize = (10,7))
-sn.heatmap(df_cm, annot=True)
+        df_cm = pd.DataFrame(array, index = set(y_label), columns = set(y_label))
+        plt.figure(figsize = (10,7))
+        sn.heatmap(df_cm, annot=True)
+        
+        lvl += 1
 
 # %%
 print("done... saving model")

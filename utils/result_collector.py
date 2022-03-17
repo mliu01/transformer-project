@@ -51,7 +51,7 @@ class ResultCollector():
             csv_writer.writerow(header)
             csv_writer.writerows(rows)
 
-        pd.read_csv(file_path, header=None, delimiter=';').T.to_csv(file_path, header=False, index=False, sep=';')
+        pd.read_csv(file_path, header=None, delimiter=';', encoding = "latin").T.to_csv(file_path, header=False, index=False, sep=';')
 
         self.logger.info('Results of {} on {} written to file {}!'.format(
                             self.experiment_type, self.dataset_name, file_path.absolute()))

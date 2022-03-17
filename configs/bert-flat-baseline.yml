@@ -8,12 +8,12 @@ task_type: "flat-classification"
 # GPU(cuda) or CPU
 device: "cuda"
 # an identifyable name (suffix)
-experiment_name: "dbmdz-flat"
+experiment_name: "dbmdz-flat-lvl3"
 experiment_name_suffix: null
 # folder and file data is stored in
 data_folder: "./data/blurbs_dataset"
 data_file: "blurbs_reduced_full.json"
-data_lvl: 1
+data_lvl: 3
 # Random Seed to generate reproducable random things
 random_seed: 42
 
@@ -37,19 +37,19 @@ metric_used: "matthews_correlation"
 drop_last: False
 
 #try to get batch_size as high as possible
-batch_size: 32
+batch_size: 24
 gradient_accumulation_steps: 1
 # Learning Rate, 1e-05
-lr_rate: 8e-05
+lr_rate: 1e-05
 #5.0e-1 = 0.5
 weight_decay: 0.005
 # Warm up for the learning rate
 warm_up: 0.1
 lr_scheduler_type: "linear"
-epochs: 30
+epochs: 5
 oversampling: 0.1
 # Number of layers in the pretrained model to not train
-freeze_layer: 11
+freeze_layer: 10
 label_smoothing: 0
 hidden_dropout_prob: 0.1 #default: 0.1
 # Custom Trainer

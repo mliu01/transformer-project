@@ -13,10 +13,10 @@ class RNNClassificationModel(PreTrainedModel):
         super().__init__(config)
         self.config = config
         
-        self.model = AutoModel.from_config(self.config, add_pooling_layer=False)
+        self.roberta = AutoModel.from_config(self.config, add_pooling_layer=False)
         self.classifier = RNNHead(self.config)
 
-        self.model.init_weights()      
+        self.roberta.init_weights()      
         
     def forward(
         self,
@@ -38,7 +38,7 @@ class RNNClassificationModel(PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

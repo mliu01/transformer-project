@@ -56,6 +56,7 @@ from utils.configuration import (
     isnotebook
 )
 from utils.metrics import Metrics
+from utils import dhc_scorer
 from utils import scorer
 from utils.BERT import BERT
 from utils.result_collector import ResultCollector
@@ -78,7 +79,7 @@ get_ipython().run_line_magic("matplotlib", "inline")
 block_size_10MB = 10 << 20
 
 # %%
-args_dict = yaml_dump_for_notebook(filepath='configs/flat-baseline.yml')
+args_dict = yaml_dump_for_notebook(filepath='configs/lcpn-baseline.yml')
 
 # %%
 filename, filepath = save_config(args_dict)
@@ -100,14 +101,7 @@ dataset_full = load_dataset(
 )["train"]
 
 # %%
-if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'NER':
-    if args_dict['data_lvl']:
-        dataset_full = dataset_full.remove_columns("label")
-        dataset_full = dataset_full.rename_column(f"lvl{args_dict['data_lvl']}", "label")
-
-    dataset_full = dataset_full.class_encode_column("label")
-
-elif args_dict['task_type'] == 'hierarchical-classification':
+if args_dict['task_type'] == 'hierarchical-classification':
     if 'path_list' in dataset_full.column_names:
 
         #encoding
@@ -115,6 +109,17 @@ elif args_dict['task_type'] == 'hierarchical-classification':
 
         ds_object = CustomDS(dataset_full)
         dataset_full = ds_object.get_encoded_dataset()
+
+else:
+    if args_dict['task_type']== 'flat-classification':
+        if args_dict['data_lvl']:
+            dataset_full = dataset_full.remove_columns("label")
+            dataset_full = dataset_full.rename_column(f"lvl{args_dict['data_lvl']}", "label")
+
+        dataset_full = dataset_full.class_encode_column("label")
+        num_labels = dataset_full.features["label"].num_classes
+    else:
+        num_labels = len(list(set(dataset_full['label'])))
 
 
 # removes unnecessary columns
@@ -178,13 +183,14 @@ if args_dict["oversampling"]:
 dataset["train"] = dataset["train"].shuffle(seed=args_dict["random_seed"])
 
 # %%
-from utils.custom_dataset_encoding import load_encoder
-encoder = load_encoder()
-num_labels = len(encoder[2].classes_)
-num_lables_per_lvl = {i: len(encoder[i].classes_) for i in range(len(encoder))}
-
-# %%
-num_lables_per_lvl
+if args_dict['task_type'] == 'hierarchical-classification':
+    from utils.custom_dataset_encoding import load_encoder
+    encoder = load_encoder()
+    num_labels = len(encoder[2].classes_)
+    num_lables_per_lvl = {i: len(encoder[i].classes_) for i in range(len(encoder))}
+    num_lables_per_lvl
+else:
+    num_lables_per_lvl = None
 
 # %% [markdown]
 # ## Model Definition <a class="anchor" id="model"></a>
@@ -192,8 +198,20 @@ num_lables_per_lvl
 # %%
 # Model class definition 
 model_obj = BERT(
-    args_dict, num_labels=num_labels, num_labels_per_lvl=num_lables_per_lvl
+    args_dict, num_labels=num_labels, num_labels_per_lvl=num_lables_per_lvl, dataset=dataset
 )
+
+# %%
+if args_dict['task_type'] == 'lcpn-hierarchical-classification' or args_dict['task_type'] == 'rnn-hierarchical-classification':
+    decoder = model_obj.get_decoder()
+    train_set, dev_set, test_set = model_obj.get_datasets()
+    dataset = DatasetDict(
+    {
+        "train": train_set,
+        "valid": dev_set,
+        "test": test_set
+    }
+    )
 
 # %%
 trainer_class = Trainer
@@ -241,11 +259,19 @@ if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 
     evaluator = Metrics(dataset_full.features['label'].names).compute_metrics
 
 elif args_dict['task_type'] == 'hierarchical-classification':
-    evaluator = scorer.HierarchicalScorer(args_dict['experiment_name']).compute_metrics
+    evaluator = dhc_scorer.HierarchicalScorer(args_dict['experiment_name']).compute_metrics
 
     assert (
         all(len(elem)==3 for elem in dataset['train']['label'])
     ), "Something went wrong during encoding, all labels should have length of 3 (ignore if hierarchy level is not 3)"
+
+elif args_dict['task_type'] == 'lcpn-hierarchical-classification':
+    evaluator = scorer.HierarchicalScorer(args_dict['experiment_name'], model_obj.get_tree(), decoder)
+    evaluator = evaluator.compute_metrics_transformers_flat
+
+elif args_dict['task_type'] == 'rnn-hierarchical-classification':
+    evaluator = scorer.HierarchicalScorer(args_dict['experiment_name'], model_obj.get_tree(), decoder)
+    evaluator = evaluator.compute_metrics_transformers_rnn
 
 # %%
 trainer = trainer_class(
@@ -287,22 +313,48 @@ if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 
      report = classification_report(
         labels, 
         predictions,
-        target_names= dataset['test'].features['label'].names #target_names
+        target_names= dataset['test'].features['label'].names, #target_names
+        output_dict=True
      )
      print(report)     
      with open(f'{filename}/results/metrics.json', 'w') as f:
           json.dump(metrics, f, indent=4)
 
-# %%
-if args_dict['task_type'] == 'hierarchical-classification':
-     preds =  np.array([list(pred.argmax(-1)) for pred in prediction]).tolist()
-     labels = np.array(labels).transpose().tolist()
+     pd.DataFrame(report).T.to_csv(f'{filename}/results/classification_report.csv', sep=';')
 
+# %%
+if args_dict['task_type'] == 'lcpn-hierarchical-classification':
+    preds = prediction.argmax(-1)
+    test_pred = pd.DataFrame({'label': [decoder[label]['value'] for label in dataset['test'].labels]})
+    test_pred['prediction'] = [decoder[pred]['value'] for pred in preds]
+
+    log = classification_report(test_pred['label'], test_pred['prediction'], output_dict = True)
+    pd.DataFrame(log).T.to_csv(f'{filename}/results/classification_report.csv', sep=';')
+    
+    full_prediction_output = '{}/{}.csv'.format(f"{filename}/results", "prediction-results")
+
+    test_pred.to_csv(full_prediction_output, index=False, sep=';', encoding='utf-8', quotechar='"',
+          quoting=csv.QUOTE_ALL)
+
+# %%
+if args_dict['task_type'] == 'hierarchical-classification' or args_dict['task_type'] == 'rnn-hierarchical-classification':
      label_list = []
      predcition_list = []
-     for i in range(3):
-          label_list.append([list(encoder[i].inverse_transform([label]))[0] for label in labels[i]])
-          predcition_list.append([list(encoder[i].inverse_transform([prediction]))[0] for prediction in preds[i]])
+     labels = np.array(labels).transpose().tolist()
+
+     if args_dict['task_type'] == 'rnn-hierarchical-classification':
+          preds_paths = [list(prediction.argmax(-1)) for prediction in prediction]
+          preds = np.array(preds_paths).transpose().tolist()
+          for i in range(3):
+               label_list.append([decoder[label]['value'] for label in labels[i]])
+               predcition_list.append([decoder[prediction]['value'] for prediction in preds[i]])
+     else:
+
+          preds =  np.array([list(pred.argmax(-1)) for pred in prediction]).tolist()
+          for i in range(3):
+               label_list.append([list(encoder[i].inverse_transform([label]))[0] for label in labels[i]])
+               predcition_list.append([list(encoder[i].inverse_transform([prediction]))[0] for prediction in preds[i]])
+
 
      test_pred=pd.DataFrame(data={
      "label_lvl1": label_list[0] ,"prediction_lvl1": predcition_list[0], 
@@ -322,12 +374,12 @@ if args_dict['task_type'] == 'hierarchical-classification':
           json.dump(metrics, f, indent=4)
 
 # %%
-if args_dict['task_type'] == 'hierarchical-classification':
+if args_dict['task_type'] == 'hierarchical-classification' or args_dict['task_type'] == 'rnn-hierarchical-classification':
     lvl = 0
     for y_label, y_pred in zip(label_list, predcition_list):
         log = classification_report(y_label, y_pred, output_dict = True)
 
-        pd.DataFrame(log).to_csv(f'{filename}/results/classification_report{lvl+1}.csv', sep=';')
+        pd.DataFrame(log).T.to_csv(f'{filename}/results/classification_report{lvl+1}.csv', sep=';')
 
         np.save(Path(f'{filename}/results/').joinpath(f"confusion_lvl{lvl+1}.npy"), confusion_matrix(y_label, y_pred))
 
@@ -345,3 +397,5 @@ print("done... saving model")
 trainer.save_model(f"{filename}/models")
 model_obj.model.save_pretrained(f"{filename}/pretrained")
 model_obj.tokenizer.save_pretrained(f"{filename}/pretrained")
+
+# %%

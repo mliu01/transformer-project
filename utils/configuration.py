@@ -336,10 +336,10 @@ def file_naming(path: Path, config: dict) -> str:
     # Create a string either based on parameters or the explicit experiment name and append a "_V" for Version
     if (not config["experiment_name"]) or (config["experiment_name"] == "None"):
         filename = (
-            f"FL{config['freeze_layer']}_E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_WD{config['weight_decay']}_V"
+            f"FL{config['freeze_layer']}_E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_WD{config['weight_decay']}_AttDO{config['attention_probs_dropout_prob']}_V"
         )
     else:
-        filename = f"{config['experiment_name']}_FL{config['freeze_layer']}_E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_WD{config['weight_decay']}_V"
+        filename = f"{config['experiment_name']}_FL{config['freeze_layer']}_E{config['epochs']}_B{config['batch_size']}_LR{config['lr_rate']}_WD{config['weight_decay']}_AttDO{config['attention_probs_dropout_prob']}_V"
 
     # Search all already existing files with the given name
     path_to_file = path.joinpath(filename)

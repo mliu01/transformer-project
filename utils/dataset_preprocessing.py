@@ -1,6 +1,7 @@
 # %% [markdown]
 # # Preprocessing Blurbs Dataset
 # (from https://www.inf.uni-hamburg.de/en/inst/ab/lt/resources/data/germeval-2019-hmc/)
+#
 # Processes Dateset, Hierarchy Level is set to 3 (can be changed)
 # - `ds_name`: inital dataset name
 # - `folder_path`: path to raw data
@@ -23,9 +24,6 @@ CV_NUM = 3
 
 current_directory = os.getcwd()
 print(current_directory)
-
-# TODO: create hierarchy file with dict or json of blurbs s. https://gitlab.com/vumaasha/germeval/-/blob/master/notebooks/PlayGround.ipynb
-# and https://gitlab.com/vumaasha/germeval/-/blob/master/germeval/hierarchy.py 
 
 
 # %%
@@ -105,7 +103,7 @@ def get_level_genre(relations, genre):
     return height, curr_genre
 
 # %%
-# Paths   
+# Setting paths   
 ds_name = 'blurbs'
 
 folder_path = Path(current_directory + '/data')
@@ -122,6 +120,7 @@ assert (
 ), "Directory or Files missing!" 
 
 # %%
+#Loading dataset
 train_data = load_data(train_file, 'train')
 dev_data = load_data(dev_file, 'train')
 test_data = load_data(test_file, 'train')
@@ -130,69 +129,52 @@ test_data = load_data(test_file, 'train')
 # all entries
 df = pd.concat([pd.DataFrame(train_data), pd.DataFrame(dev_data), pd.DataFrame(test_data)])
 
-# %%
-df_train = pd.DataFrame(train_data)
-df_dev = pd.DataFrame(dev_data)
-df_test = pd.DataFrame(test_data)
-
 
 # %%
-def format_df(df, level=None):
-    '''Renaming columns, adding underscores to all columns except text and if level is specified: create new column path_list'''
+def format_df(df):
+    '''Formats dataset correctly. Renaming columns, adding underscores to all columns except text, concat labels and drops irrelevant columns.'''
 
     ndf = df.copy()
     ndf.rename(columns={0: 'text'}, inplace=True)
-    ndf.loc[:, 'list'] = ndf[1].map(lambda x: x[0:level])
-    ndf.loc[:, 'label'] = ndf['list'].map(lambda x: x[-1])
-
-    max_len = ndf["list"].map(lambda x: len(x)).max()
+    ndf.loc[:, 'list'] = ndf[1].map(lambda x: x[0:3])
 
     # splits list in seperate columns (needed for later for building tree/graph)
-    lvl_list = [f'lvl{i+1}' for i in range(max_len)]
+    lvl_list = [f'lvl{i+1}' for i in range(3)]
     ndf[lvl_list] = pd.DataFrame(ndf.list.tolist(), index= ndf.index)
+
+    #concatenate labels from each level, so there are no duplicates; label is always leaf node
+    ndf['lvl2'] = ndf['lvl1'] + '/' + ndf['lvl2']
+    ndf['lvl3'] = ndf['lvl2'] + '/' + ndf['lvl3']
+    ndf['label'] = ndf['lvl3']
     
     # adds underscore to all but text
     replacing_columns = list(ndf.drop('text', axis=1).columns)
     ndf[replacing_columns] = ndf[replacing_columns].replace(' ', '_', regex=True)
 
-    # adds path_list
-    if level:
-        assert level == max_len
-        lvl_list = lvl_list[:level]
-
-    ndf['path_list'] = ndf[lvl_list].values.tolist()
     # only relevant columns
-    ndf = ndf[['label', 'text', 'path_list'] + lvl_list] 
+    ndf = ndf[['label', 'text'] + lvl_list] 
+    ndf = ndf.dropna()
 
     return ndf
 # %%
-def full_dataset(level=None):
+# saves full dataset as is
+def full_dataset():
     logger = logging.getLogger(__name__)
-    if level:
-        logger.info(f"Building datasets with hierarchy level: {level}")
-        df_full_lvl = format_df(df, level)
-        df_full_lvl = df_full_lvl.dropna()
-        logger.info(f"Initial dataset with {level} hierarchy level/s length: {len(df_full_lvl)}") 
 
-        new_ds_name = f"{ds_name}_lvl{level}_full.json"
-        df_full_lvl.to_json(output_path.joinpath(new_ds_name), orient = "records", lines=True, force_ascii=False)
-        return new_ds_name
+    logger.info(f"Building datasets with hierarchy level 3")
+    df_full_lvl = format_df(df)
+    logger.info(f"Initial dataset with 3 hierarchy level/s length: {len(df_full_lvl)}") 
 
-    df_full = format_df(df)
-    logger.info(f"Initial dataset length: {len(df_full)}")  
-      
     new_ds_name = f"{ds_name}_full.json"
-    df_full.to_json(output_path.joinpath(new_ds_name), orient = "records", lines=True, force_ascii=False)
-
-    return new_ds_name #return new ds names 
+    df_full_lvl.to_json(output_path.joinpath(new_ds_name), orient = "records", lines=True, force_ascii=False)
+    return new_ds_name
 
 # %%
-def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOcc=100, split=0.85):
+def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOcc=100):
     logger = logging.getLogger(__name__)
     logger.info(f"Building datasets with at least {minOcc} entries")
 
     df = pd.read_json(output_path.joinpath(ds_file), orient='records', lines=True)
-    df = df.dropna()
 
     # each path has to occur at least minOcc times
     #df = df.groupby(df['path_list'].map(tuple)).filter(lambda x : len(x)>=minOcc)
@@ -201,46 +183,22 @@ def extra_processing(ds_file='blurbs_full.json', out_prefix='part-blurbs', minOc
     df = df.groupby(df['label'].map(tuple)).filter(lambda x : len(x)>=minOcc)
 
     logger.info(f"Finished dataset length: {len(df)}")
-    print(df.groupby('label').size())
     df.to_json(output_path.joinpath(f"{out_prefix}_full.json"), orient = "records", lines=True, force_ascii=False)
-
-    #split into train and test dataset
-    # train_data = df.sample(frac=split)
-    # test_data = df.drop(train_data.index)
-
-    # logger.info(f"Train dataset length: {len(train_data)}")
-    # logger.info(f"Test dataset length: {len(test_data)}")
-
-    # train_data.to_json(
-    #     output_path.joinpath(f"{out_prefix}_train.json"), orient = "records", lines=True, force_ascii=False)
-    # test_data.to_json(
-    #     output_path.joinpath(f"{out_prefix}_test.json"), orient = "records", lines=True, force_ascii=False)
 
 # %%
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
 
-    #lvl_ds = full_dataset(level=3) # complete dataset with hierarchy level 3, returns new files name
-    
-    extra_processing(ds_file='blurbs_full.json', out_prefix='blurbs_reduced', minOcc=100)
+    lvl_ds = full_dataset() # complete dataset with hierarchy level 3, returns new files name
+    extra_processing(ds_file=lvl_ds, out_prefix='blurbs_reduced', minOcc=100)
 
-
-# %%
-# consistent dataset for flat + hierarchical
-# new_df = format_df(df, 3)
-# new_df = new_df.dropna()
-# new_df['lvl2'] = new_df['lvl1'] + '/' + new_df['lvl2']
-# new_df['lvl3'] = new_df['lvl2'] + '/' + new_df['lvl3']
-# new_df['label'] = new_df['lvl3']
-# new_df['path_list'] = new_df[['lvl1', 'lvl2', 'lvl3']].values.tolist()
-# new_df.to_json('./data/blurbs_dataset/blurbs_full.json', orient = "records", lines=True, force_ascii=False)
 
 # %% [markdown]
 # # Build Tree from Dataset
-# Takes train and test dataset and builds a graph with every possible path from root to leaf node
-# Is hard coded for 3 hierarchy levels (json_line, nodes dictionaries)
-# - `name`: name of dataset to build tree from (prefix, i.e.: blurbs_train.json -> blurbs)
+# Takes dataset and builds a graph with every possible path from root to leaf node.
+# Specifically coded for 3 hierarchy levels (json_line, nodes dictionaries)
+# - `name`: name of dataset to build tree from
 
 # %%
 import json
@@ -261,6 +219,7 @@ Path(output_path).mkdir(parents=True, exist_ok=True)
 
 
 # %%
+# optional, used for visual represenation of graph
 def hierarchy_pos(G, root=None, width=1., vert_gap = 0.2, vert_loc = 0, xcenter = 0.5):
 
     '''

@@ -1,9 +1,7 @@
 from sklearn.metrics import precision_recall_fscore_support, f1_score
-from networkx import all_pairs_shortest_path_length, relabel_nodes
-from contextlib import contextmanager
-from sklearn.preprocessing import MultiLabelBinarizer
 import logging
 import numpy as np
+from hiclass import metrics
 
 
 def score_traditional(gs: list, prediction: list, name='Unknown'):
@@ -31,143 +29,31 @@ def score_mwpd(gs: list, prediction: list):
     return {'weighted': weighted_scores, 'macro': macro_scores}
 
 
-# Unsure if this is needed!
-# def f_1_weighted(y_true, y_pred):
-#    return f1_score(y_true, y_pred, labels=np.unique(y_true), average='weighted')
 
+def hierarchical_score(y_true, y_pred):
+    # transpose labels and predictions, has to be in shape (n_samples, n_levels)
+    y_true_ = np.array(y_true).transpose()
+    y_pred_ = np.array(y_pred).transpose()
 
-def h_score(y_true, y_pred, class_hierarchy, root):
-    """ Influenced by https://github.com/asitang/sklearn-hierarchical-classification/blob/develop
-    /sklearn_hierarchical/metrics.py """
-    y_true_ = fill_ancestors(y_true, root, graph=class_hierarchy)
-    y_pred_ = fill_ancestors(y_pred, root, graph=class_hierarchy)
+    h_prec = metrics.precision(y_true_, y_pred_)
+    h_recall = metrics.recall(y_true_, y_pred_)
+    h_f1 = metrics.f1(y_true_, y_pred_)
 
-    ix = np.where((y_true_ != 0) & (y_pred_ != 0))
-
-    true_positives = len(ix[0])
-    all_positives = np.count_nonzero(y_true_)
-    all_results = np.count_nonzero(y_pred_)
-
-    h_precision = 0
-    if all_results > 0:
-        h_precision = true_positives / all_results
-
-    h_recall = 0
-    if all_positives > 0:
-        h_recall = true_positives / all_positives
-
-    return h_precision, h_recall
-
-
-def h_fbeta_score(y_true, y_pred, class_hierarchy, root, beta=1.):
-    """ Influenced by https://github.com/asitang/sklearn-hierarchical-classification/blob/develop
-    /sklearn_hierarchical/metrics.py """
-    hP, hR = h_score(y_true, y_pred, class_hierarchy, root)
-    if (beta ** 2. * hP + hR) > 0:
-        return (1. + beta ** 2.) * hP * hR / (beta ** 2. * hP + hR)
-    else:
-        return 0
-
-
-@contextmanager
-def multi_labeled(y_true, y_pred, graph, root):
-    """ Influenced by https://github.com/asitang/sklearn-hierarchical-classification/blob/develop
-    /sklearn_hierarchical/metrics.py """
-    mlb = MultiLabelBinarizer()
-    all_classes = [
-        node
-        for node in graph.nodes
-        if node != root
-    ]
-    # print('all_classes',all_classes) Nb. we pass a (singleton) list-within-a-list as fit() expects an iterable of
-    # iterables -> Changed implementation here
-    all_classes_new = []
-    for klasse in all_classes:
-        all_classes_new.append([klasse])
-
-    mlb.fit(all_classes_new)
-
-    y_true_new = []
-    for klasse in y_true:
-        y_true_new.append([klasse])
-
-    y_pred_new = []
-    for klasse in y_pred:
-        y_pred_new.append([klasse])
-
-    node_label_mapping = {
-        old_label: new_label
-        for new_label, old_label in enumerate(list(mlb.classes_))
-    }
-    # print('node_label_mapping',node_label_mapping)
-    # print('y_true transform',y_true)
-    # print('mlb.transform(y_true)',mlb.transform(y_true_new)[0])
-    yield (
-        mlb.transform(y_true_new),
-        mlb.transform(y_pred_new),
-        relabel_nodes(graph, node_label_mapping),
-        root,
-    )
-
-
-def hierarchical_score(y_true, y_pred, tree, root, name='Unknown'):
-    logger = logging.getLogger(__name__)
-    with multi_labeled(y_true, y_pred, tree, root) as (y_test_, y_pred_, graph_, root_):
-        h_fbeta = h_fbeta_score(
-            y_test_,
-            y_pred_,
-            graph_,
-            root_,
-        )
-        if not name:
-            return h_fbeta
-        else:
-            logger.info("{} - Hierarchy: | h_f1: {:4f}".format(name, h_fbeta))
-            return h_fbeta
-
-
-def fill_ancestors(y, root, graph, copy=True):
-    """ Influenced by https://github.com/asitang/sklearn-hierarchical-classification/blob/develop
-    /sklearn_hierarchical/metrics.py """
-    y_ = y.copy() if copy else y
-    paths = all_pairs_shortest_path_length(graph.reverse(copy=False))
-    for target, distances in paths:
-        if target == root:
-            # Our stub ROOT node, can skip
-            continue
-        # print('y',y)
-        # print('target',target)
-        ix_rows = np.where(y[:, target] > 0)[0]
-        # all ancestors, except the last one which would be the root node
-        ancestors = list(distances.keys())[:-1]
-        # print('ancestors',ancestors)
-        # print('mesh',tuple(np.meshgrid(ix_rows, ancestors)))
-        # print('target',target)
-        # print(type(target))
-        y_[tuple(np.meshgrid(ix_rows, ancestors))] = 1
-    graph.reverse(copy=False)
-    # print('y_',y_[0])
-    return y_
-
-
-# only if SelectKBest was used
-def get_most_important_features(classifier_pipeline_object):
-    feature_names = classifier_pipeline_object['vect'].get_feature_names()
-    # print(feature_names)
-    return [feature_names[i] for i in classifier_pipeline_object['chi'].get_support(indices=True)]
+    return h_prec, h_recall, h_f1
 
 
 class HierarchicalScorer:
-    def __init__(self, experiment_name, tree, transformer_decoder=None, num_labels_per_level=None):
+    def __init__(self, experiment_name, tree=None, transformer_decoder=None):
         self.logger = logging.getLogger(__name__)
 
         self.experiment_name = experiment_name
         self.tree = tree
         self.transformer_decoder = transformer_decoder
-        self.num_labels_per_lvl = num_labels_per_level
 
-        self.root = [node[0] for node in self.tree.in_degree if node[1] == 0][0]
+        if tree:
+            self.root = [node[0] for node in self.tree.in_degree if node[1] == 0][0]
 
+# functions for flat 
     def determine_path_to_root(self, nodes):
         predecessors = [k for k in self.tree.predecessors(nodes[-1])]
         if len(predecessors) > 0:
@@ -211,7 +97,6 @@ class HierarchicalScorer:
 
         return label_per_lvl, preds_per_lvl
 
-    #Taken from experiment runner --> Refactor - consolidate functions
     def get_all_nodes_per_lvl(self, level):
         successors = self.tree.successors(self.root)
         while level > 0:
@@ -222,88 +107,15 @@ class HierarchicalScorer:
             level -= 1
         return successors
 
-    def compute_metrics_transformers_flat(self, pred):
+
+
+    def compute_metrics_transformers_lcpn(self, pred):
         raw_labels = pred.label_ids
         raw_preds = pred.predictions.argmax(-1)
 
         labels = [self.transformer_decoder[label]['value'] for label in raw_labels]
         preds = [self.transformer_decoder[pred]['value'] for pred in raw_preds]
 
-        return self.compute_metrics_no_encoding(labels, preds)
-
-    def compute_metrics_transformers_hierarchy(self, pred):
-        labels_paths, preds_paths = self.transpose_hierarchy_predictions(pred)
-
-        labels_per_lvl = np.array(labels_paths).transpose().tolist()
-        preds_per_lvl = np.array(preds_paths).transpose().tolist()
-
-        labels = [label_path[-1] for label_path in labels_paths]
-        preds = [pred_path[-1] for pred_path in preds_paths]
-
-        return self.compute_metrics(labels, preds, labels_per_lvl, preds_per_lvl)
-
-    def transpose_hierarchy_predictions(self, pred):
-        labels_paths = pred.label_ids
-        preds_paths = []
-        for prediction in pred.predictions:
-            pred_path = []
-            for i in range(len(prediction)):
-                # Cut additional zeros!
-                if self.num_labels_per_lvl is not None:
-                    pred = prediction[i][:self.num_labels_per_lvl[i+1]].argmax(-1)
-                else:
-                    pred = prediction[i].argmax(-1)
-                pred_path.append(pred)
-            preds_paths.append(pred_path)
-
-        # Decode hierarchy lvl labels
-        for i in range(len(labels_paths[0])):
-            nodes = list(self.get_all_nodes_per_lvl(i))
-            for label_path in labels_paths:
-                if label_path[i] > 0: # Keep 0 (out of category)
-                    index = label_path[i] - 1
-                    label_path[i] = nodes[index]
-            for preds_path in preds_paths:
-                if label_path[i] > 0: # Keep 0 (out of category)
-                    index = preds_path[i] - 1
-                    preds_path[i] = nodes[index]
-
-        return preds_paths, preds_paths
-
-    def compute_metrics_transformers_rnn(self, pred):
-        labels, preds, labels_per_lvl, preds_per_lvl = self.transpose_rnn_hierarchy(pred)
-
-        return self.compute_metrics(labels, preds, labels_per_lvl, preds_per_lvl)
-
-    def transpose_rnn_hierarchy(self, pred):
-        labels_paths = [list(label) for label in pred.label_ids]
-        preds_paths = [list(prediction.argmax(-1)) for prediction in pred.predictions]
-
-        labels_per_lvl = np.array(labels_paths).transpose().tolist()
-        preds_per_lvl = np.array(preds_paths).transpose().tolist()
-
-        # Derive leaf predictions
-        fill_cat = len(self.tree)
-
-        # Derive prediction
-        labels = [self.derive_leaf_node(label_path, fill_cat) for label_path in labels_paths]
-        preds = [self.derive_leaf_node(pred_path, fill_cat) for pred_path in preds_paths]
-
-        return labels, preds, labels_per_lvl, preds_per_lvl
-
-    def derive_leaf_node(self, path, fill_cat):
-        """Recursively search for the last element that is not the fill up category"""
-        last_element = path[-1]
-        # Last element found
-        if last_element != fill_cat:
-            return last_element
-        # List becomes empty --> return out of category (0)
-        if len(path) == 1:
-            return 0
-
-        return self.derive_leaf_node(path[:len(path)-1], fill_cat)
-
-    def compute_metrics_no_encoding(self, labels, preds):
         decoder = dict(self.tree.nodes(data="name"))
         encoder = dict([(value, key) for key, value in decoder.items()])
 
@@ -313,14 +125,41 @@ class HierarchicalScorer:
 
         labels_per_lvl, preds_per_lvl = self.determine_label_preds_per_lvl(pp_labels, pp_preds)
 
-        return self.compute_metrics(pp_labels, pp_preds, labels_per_lvl, preds_per_lvl)
+        return self.compute_metrics(labels_per_lvl, preds_per_lvl)
 
-    def compute_metrics(self, labels, preds, labels_per_lvl, preds_per_lvl):
+
+    def compute_metrics_transformers_dhc(self, pred):
+        labels_paths = [list(label) for label in pred.label_ids]
+
+        labels_per_lvl = np.array(labels_paths).transpose().tolist()
+        preds_per_lvl = [list(prediction.argmax(-1)) for prediction in pred.predictions] 
+
+        return self.compute_metrics(labels_per_lvl, preds_per_lvl)
+
+    def compute_metrics_transformers_rnn(self, pred):
+        labels_per_lvl, preds_per_lvl = self.transpose_rnn(pred)
+
+        return self.compute_metrics(labels_per_lvl, preds_per_lvl)
+
+    def transpose_rnn(self, pred):
+        labels_paths = [list(label) for label in pred.label_ids]
+        preds_paths = [list(prediction.argmax(-1)) for prediction in pred.predictions]
+
+        labels_per_lvl = np.array(labels_paths).transpose().tolist()
+        preds_per_lvl = np.array(preds_paths).transpose().tolist()
+
+        return labels_per_lvl, preds_per_lvl
+
+    def compute_metrics(self, labels_per_lvl, preds_per_lvl):
         """Compute Metrics for leaf nodes and all nodes in the graph separately"""
         self.logger.debug('Leaf nodes')
-        h_f_score = hierarchical_score(labels, preds, self.tree, self.root, name=self.experiment_name)
+        h_prec, h_recall, h_f1 = hierarchical_score(labels_per_lvl, preds_per_lvl)
 
-        results = { 'h_f1': h_f_score}
+        results = { 
+            'h_prec' :h_prec,
+            'h_recall': h_recall,
+            'h_f1': h_f1
+            }
 
         counter = 0
 

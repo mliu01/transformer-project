@@ -11,10 +11,10 @@ class LCPNClassificationModel(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.roberta = AutoModel.from_config(self.config, add_pooling_layer=False)
+        self.model = AutoModel.from_config(self.config, add_pooling_layer=False)
         self.classifier = LCPNClassificationHead(self.config)
 
-        self.roberta.init_weights()      
+        self.model.init_weights()      
         
     def forward(
         self,
@@ -36,7 +36,7 @@ class LCPNClassificationModel(PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.roberta(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -73,9 +73,7 @@ class LCPNClassificationHead(nn.Module):
         for count, number in enumerate(config.num_labels_per_lvl.items()):
             self.num_labels_per_lvl[count] = number[1]
 
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
+        classifier_dropout = 0.1 #set default to 0.1
         self.dropout = nn.Dropout(classifier_dropout)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -118,30 +116,6 @@ class LCPNClassificationHead(nn.Module):
             loss = loss_fct(logits.view(-1, self.num_labels_per_lvl[len(self.paths_per_lvl)-1]), updated_labels.view(-1)) #self.num_labels_per_lvl[3]
         else:
             loss += loss_fct(logits.view(-1, self.num_labels_per_lvl[len(self.paths_per_lvl)-1]), updated_labels.view(-1))
-
-        #Return only logits of last run to receive only valid paths!
-        return logits, loss
-
-    def forward_along_paths(self, input, labels):
-        # Make a prediction along all paths in the tree
-        loss_fct = nn.CrossEntropyLoss()
-        loss = None
-        logits = None
-
-        input = self.dropout(input)
-
-        # Make prediction for each lvl in hierarchy along path to hierarchy lvl
-        for lvl in self.paths_per_lvl:
-        #lvl = 3
-            logit_list = [self.predict_along_path(input,path, lvl) for path in self.paths_per_lvl[f"lvl_{lvl}"]]
-            logits = torch.stack(logit_list, dim=1).to(self.device)
-
-            updated_labels = self.update_label_per_lvl(labels, lvl)
-
-            if loss is None:
-                loss = loss_fct(logits.view(-1, self.num_labels_per_lvl[f"lvl_{lvl}"]), updated_labels.view(-1))
-            else:
-                loss += loss_fct(logits.view(-1, self.num_labels_per_lvl[f"lvl_{lvl}"]), updated_labels.view(-1))
 
         #Return only logits of last run to receive only valid paths!
         return logits, loss

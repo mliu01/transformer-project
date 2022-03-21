@@ -13,10 +13,10 @@ class RNNClassificationModel(PreTrainedModel):
         super().__init__(config)
         self.config = config
         
-        self.roberta = AutoModel.from_config(self.config, add_pooling_layer=False)
+        self.model = AutoModel.from_config(self.config, add_pooling_layer=False)
         self.classifier = RNNHead(self.config)
 
-        self.roberta.init_weights()      
+        self.model.init_weights()      
         
     def forward(
         self,
@@ -38,7 +38,7 @@ class RNNClassificationModel(PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.roberta(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -92,7 +92,8 @@ class RNNHead(nn.Module):
 
         self.hidden_size = config.hidden_size
 
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = 0.1 #set default to 0.1
+        self.dropout = nn.Dropout(classifier_dropout)
 
         self.i2h = nn.Linear(config.hidden_size + config.hidden_size, config.hidden_size)
         self.i2o = nn.Linear(config.hidden_size + config.hidden_size, config.num_labels)

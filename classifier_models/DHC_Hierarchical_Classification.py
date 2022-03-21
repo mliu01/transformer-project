@@ -4,20 +4,23 @@ import torch.nn as nn
 from transformers import AutoModel
 from transformers.modeling_outputs import SequenceClassifierOutput
 from transformers.modeling_utils import PreTrainedModel
+from utils.loss_network import HierarchicalLossNetwork as HLN
 
 
 # %%
-class HierarchicalClassificationModel(PreTrainedModel):
+class DHCClassificationModel(PreTrainedModel):
     ''' Based on "Deep Hierarchical Classification for Category Prediction in E-commerce Systems"
         see: https://github.com/Ugenteraan/Deep_Hierarchical_Classification
     '''
 
-    def __init__(self, config):
+    def __init__(self, config, tree):
         super().__init__(config)
         self.config = config
         
         self.model = AutoModel.from_config(self.config, add_pooling_layer=False)
-        self.classifier = HierarchicalClassificationHead(self.config)
+        self.classifier = DHCClassificationHead(self.config)
+
+        self.HLN = HLN(tree, config.decoder, device=torch.device("cuda:0" if torch.cuda.is_available() else 'cpu'))
 
         self.model.init_weights()      
         
@@ -61,6 +64,14 @@ class HierarchicalClassificationModel(PreTrainedModel):
         lvl1, lvl2, lvl3 = self.classifier(sequence_output)
         logits = [lvl1, lvl2, lvl3]
 
+
+        transposed_labels = torch.transpose(labels, 0, 1) # from [lvl1, lvl2, lvl3] -> [lvl1], [lvl2], [lvl3]
+        
+        dloss = self.HLN.calculate_dloss(logits, transposed_labels)
+        lloss = self.HLN.calculate_lloss(logits, transposed_labels)
+
+        loss = lloss + dloss 
+
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
@@ -73,24 +84,25 @@ class HierarchicalClassificationModel(PreTrainedModel):
         )  
 
 
-class HierarchicalClassificationHead(nn.Module):
+class DHCClassificationHead(nn.Module):
     def __init__(self, config):
-        super(HierarchicalClassificationHead, self).__init__()
+        super(DHCClassificationHead, self).__init__()
 
         self.hidden_size = config.hidden_size
         self.num_labels_per_lvl = config.num_labels_per_lvl
 
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        classifier_dropout = 0.1
+        self.dropout = nn.Dropout(classifier_dropout)
 
-        self.linear_lvl1 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[0])
-        self.linear_lvl2 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[1])
-        self.linear_lvl3 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[2])
+        self.linear_lvl1 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[1])
+        self.linear_lvl2 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[2])
+        self.linear_lvl3 = nn.Linear(config.hidden_size, self.num_labels_per_lvl[3])
 
-        self.softmax_reg1 = nn.Linear(self.num_labels_per_lvl[0], self.num_labels_per_lvl[0])
-        self.softmax_reg2 = nn.Linear(self.num_labels_per_lvl[0] + self.num_labels_per_lvl[1], self.num_labels_per_lvl[1])
-        self.softmax_reg3 = nn.Linear(self.num_labels_per_lvl[1] + self.num_labels_per_lvl[2], self.num_labels_per_lvl[2])
+        self.softmax_reg1 = nn.Linear(self.num_labels_per_lvl[1], self.num_labels_per_lvl[1])
+        self.softmax_reg2 = nn.Linear(self.num_labels_per_lvl[1] + self.num_labels_per_lvl[2], self.num_labels_per_lvl[2])
+        self.softmax_reg3 = nn.Linear(self.num_labels_per_lvl[2] + self.num_labels_per_lvl[3], self.num_labels_per_lvl[3])
 
 
 

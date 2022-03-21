@@ -1,4 +1,3 @@
-
 class TreeUtils():
 
     def __init__(self, tree):
@@ -39,6 +38,23 @@ class TreeUtils():
                 counter += 1
                 if node == path[i]:
                     normalized_path.append(counter)
+                    break
+
+        assert (len(path) == len(normalized_path))
+        return normalized_path
+
+    def normalize_path_from_root_per_parent(self, path):
+        """Normalize label values per parent node"""
+        found_successor = self.root
+        normalized_path = []
+        for searched_successor in path:
+            counter = 0
+            successors = self.tree.successors(found_successor)
+            for successor in successors:
+                counter += 1
+                if searched_successor == successor:
+                    normalized_path.append(counter)
+                    found_successor = searched_successor
                     break
 
         assert (len(path) == len(normalized_path))

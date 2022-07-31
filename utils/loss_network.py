@@ -23,9 +23,13 @@ class HierarchicalLossNetwork:
     def check_hierarchy(self, current_level, previous_level, l): 
         '''Check if the predicted class at level l is a children of the class predicted at level l-1 for the entire batch.
         '''
-
+        # 0 is ooo
+        curr = [self.decoder[l][current_level[i].item()]['original_key'] if current_level[i].item() != 0 else None for i in range(current_level.size()[0])]
+        prev = [self.decoder[l-1][previous_level[i].item()]['original_key'] if previous_level[i].item() != 0 else None for i in range(previous_level.size()[0])]
+        successor = [list(self.hierarchy.successors(prev[i])) if prev[i] else [] for i in range(previous_level.size()[0])]
+        
         # if current pred is a successor of prev pred -> 0; if not -> 1
-        bool_tensor = [not self.decoder[l][current_level[i].item()]['original_key'] if current_level[i].item() != 0 else True in list(self.hierarchy.successors(self.decoder[l-1][previous_level[i].item()]['original_key'])) for i in range(previous_level.size()[0])]
+        bool_tensor = [not curr[i] in successor[i] if curr[i] != 0 else True for i in range(previous_level.size()[0])]
 
         return torch.FloatTensor(bool_tensor).to(self.device)
 

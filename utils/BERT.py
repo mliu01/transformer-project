@@ -58,15 +58,15 @@ class BERT(nn.Module):
             
             elif args_dict["task_type"] == "rnn-hierarchical-classification":
                 normalized_encoder, self.normalized_decoder, number_of_labels = self.encode_labels()
-                self.config.num_labels = number_of_labels
+                #self.config.num_labels = number_of_labels
 
 
-            # encoding dataset for hierarchical classification
-            if not args_dict["task_type"] == "flat-classification":
-                tf_ds = {}
-                for key in self.dataset:
-                    tf_ds[key] = CategoryDataset(self.dataset[key], normalized_encoder) 
-                self.dataset = tf_ds
+            #encoding dataset for hierarchical classification
+            #if not (args_dict["task_type"] == "flat-hierarchical-classification" or args_dict["task_type"] == "rnn-hierarchical-classification"):
+            tf_ds = {}
+            for key in self.dataset:
+                tf_ds[key] = CategoryDataset(self.dataset[key], normalized_encoder) 
+            self.dataset = tf_ds
 
             self.model = provide_model(args_dict["task_type"], args_dict["checkpoint_model_or_path"], self.config, self.tree)
         else:
@@ -270,7 +270,7 @@ class BERT(nn.Module):
 
 
     def get_datasets(self):
-        return self.dataset['train'], self.dataset['valid'], self.dataset['test']
+        return self.dataset['train'], self.dataset['valid']#, self.dataset['test']
         
     def get_tree(self):
         return self.tree

@@ -17,8 +17,8 @@
 # ## Imports
 
 # %%
-# %load_ext autoreload
-# %autoreload 2
+#%load_ext autoreload
+#%autoreload 2
 
 # %%
 import time
@@ -105,9 +105,26 @@ if args_dict['task_type']== 'flat-classification':
         dataset_full = dataset_full.remove_columns("label")
         dataset_full = dataset_full.rename_column(f"lvl{args_dict['data_lvl']}", "label")
 
-    dataset_full = dataset_full.class_encode_column("label")
-    num_labels = dataset_full.features["label"].num_classes
+    from sklearn import preprocessing
+    Le = preprocessing.LabelEncoder()
+    Le.fit(dataset_full['label'])
+    labels = [Le.transform([i])[0] for i in dataset_full['label']]
+    dataset_full = dataset_full.remove_columns("label")
+    dataset_full = dataset_full.add_column("label", labels)
+    num_labels = len(Le.classes_)
+
+elif args_dict['task_type']== 'rnn-hierarchical-classification':
+    from sklearn import preprocessing
+    Le = preprocessing.OrdinalEncoder(dtype=np.int_)
+    Le.fit(dataset_full['path_list'])
+    Le.categories_
+    labels = [Le.transform([i])[0] for i in dataset_full['path_list']]
+    dataset_full = dataset_full.remove_columns("label")
+    dataset_full = dataset_full.add_column("label", labels)
+    num_labels = len(Le.categories_[0]) + len(Le.categories_[1]) + len(Le.categories_[2])
+
 else:
+    
     num_labels = len(list(set(dataset_full['label'])))
 
 # removes unnecessary columns
@@ -131,14 +148,14 @@ data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 # use shuffle to make sure the order of samples is randomized (deterministically)
 dataset_full = dataset_full.shuffle(seed=args_dict["random_seed"])
 ds_train_testvalid = dataset_full.train_test_split(test_size=(1 - args_dict["split_ratio_train"])) #split full to train - test
-test_valid = ds_train_testvalid['test'].train_test_split(test_size=0.5) #split test to validaton - test (1:1)
+#test_valid = ds_train_testvalid['test'].train_test_split(test_size=0.5) #split test to validaton - test (1:1)
 
 
 dataset = DatasetDict(
     {
         "train": ds_train_testvalid['train'],
-        "valid": test_valid['train'],
-        "test": test_valid['test']
+        "valid": ds_train_testvalid['test'] #"valid": test_valid['train'],
+        #"test": test_valid['test']
     }
 )
 
@@ -166,12 +183,15 @@ if args_dict["oversampling"]:
 dataset["train"] = dataset["train"].shuffle(seed=args_dict["random_seed"])
 
 # %%
-assert(
-    len(set(dataset['train']['label']))  == len(set(dataset['valid']['label'])) == len(set(dataset['test']['label']))
-), "Repeat cell above, different amount of labels in the dataset splits!"
+# assert(
+#     len(set(dataset['train']['label']))  == len(set(dataset['valid']['label'])) == len(set(dataset['test']['label']))
+# ), "Repeat cell above, different amount of labels in the dataset splits!"
 
 # %%
-target_names = list(set(dataset['train']['label']))
+len(Le.categories_[2])
+
+# %%
+#target_names = list(set(dataset['train']['label']))
 
 # %% [markdown]
 # ## Model Definition <a class="anchor" id="model"></a>
@@ -183,14 +203,15 @@ model_obj = BERT(
 )
 
 # %%
-if not args_dict['task_type'] == 'flat-classification':
+#decoder = Le.inverse_transform
+if args_dict['task_type'] == 'lcpn-hierarchical-classification' or args_dict['task_type'] == 'dhc-hierarchical-classification':
     decoder = model_obj.get_decoder()
-    train_set, dev_set, test_set = model_obj.get_datasets()
+    train_set, dev_set = model_obj.get_datasets()
     dataset = DatasetDict(
     {
         "train": train_set,
         "valid": dev_set,
-        "test": test_set
+        #"test": test_set
     }
     )
 
@@ -226,18 +247,21 @@ training_args = TrainingArguments(
     dataloader_num_workers=args_dict["workers"],
     disable_tqdm=False,
     remove_unused_columns=True,
-    dataloader_drop_last=args_dict["drop_last"]
+    dataloader_drop_last=args_dict["drop_last"],
+    
+    skip_memory_metrics=True,
+    report_to="none"
 )
 
 # %% [markdown]
 # ## Train Model <a class="anchor" id="Train"></a>
 
 # %%
-if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'NER':
-    evaluator = Metrics(dataset_full.features['label'].names).compute_metrics
-    print("USING FLAT METRICS")
+# if args_dict['task_type'] == 'flat-classification' or args_dict['task_type'] == 'NER':
+#     evaluator = Metrics().compute_metrics
+#     print("USING FLAT METRICS")
 
-elif args_dict['task_type'] == 'lcpn-hierarchical-classification':
+if args_dict['task_type'] == 'lcpn-hierarchical-classification' or args_dict['task_type'] == 'flat-classification':
     evaluator = scorer.HierarchicalScorer(args_dict['experiment_name'], model_obj.get_tree(), decoder)
     evaluator = evaluator.compute_metrics_transformers_lcpn
     print("USING LCPN SCORER")
@@ -252,10 +276,13 @@ elif args_dict['task_type'] == 'dhc-hierarchical-classification':
     evaluator = evaluator.compute_metrics_transformers_dhc
     print("USING DHC SCORER")
 
+# %%
+def get_model():
+    return model_obj.model
 
 # %%
 trainer = trainer_class(
-    model=model_obj.model,
+    model_init=get_model,
     args=training_args,
     train_dataset=dataset["train"],
     eval_dataset=dataset["valid"],
@@ -263,6 +290,63 @@ trainer = trainer_class(
     compute_metrics=evaluator,
     data_collator=data_collator
     #callbacks=[EarlyStoppingCallback(early_stopping_patience = 10)]
+)
+
+# %%
+import ray
+from ray import tune
+from ray.tune import CLIReporter
+from ray.tune.schedulers.pb2 import PB2
+from ray.tune.schedulers import PopulationBasedTraining
+
+# %%
+ray.init(log_to_driver=False,ignore_reinit_error=True) 
+
+tune_config = {
+    "per_device_train_batch_size": 12,
+    "per_device_eval_batch_size": 12,
+    "num_train_epochs": 10,
+}
+
+scheduler = PopulationBasedTraining(
+    time_attr="training_iteration",
+    metric="eval_h_f1",
+    mode="max",
+    perturbation_interval=2,
+    quantile_fraction = 0.5,
+    hyperparam_mutations={
+        "learning_rate": tune.uniform(1e-5, 8e-5),
+        "weight_decay": tune.uniform(0.001, 0.1),
+        #"weight_decay": [np.float64(0.001).item(), np.float64(0.01).item()],
+        #"learning_rate": [np.float64(0.00001).item(), np.float64(0.0001).item()],
+        
+    },
+)
+
+reporter = CLIReporter(
+    parameter_columns={
+        "weight_decay": "w_decay",
+        "learning_rate": "lr",
+        "num_train_epochs": "num_epochs",
+    },
+    metric_columns=["eval_h_f1", "eval_average_weighted_f1", "eval_loss", "epoch", "training_iteration"]
+)
+
+
+
+# %%
+trainer.hyperparameter_search(
+    hp_space=lambda _: tune_config,
+    backend="ray",
+    n_trials=4,
+    resources_per_trial={"cpu": 16, "gpu": 1},
+    scheduler=scheduler,
+    keep_checkpoints_num=1,
+    checkpoint_score_attr="training_iteration",
+    progress_reporter=reporter,
+    local_dir="~/ray_results/",
+    name="lcpn",
+    #log_to_file=True,
 )
 
 # %%
@@ -309,13 +393,6 @@ if args_dict['task_type'] == 'lcpn-hierarchical-classification':
 
     log = classification_report(test_pred['label'], test_pred['prediction'], output_dict = True)
     pd.DataFrame(log).T.to_csv(f'{filename}/results/classification_report.csv', sep=';')
-
-# %%
-# if args_dict['task_type'] == 'rnn-hierarchical-classification':
-#     label_list = [decoder[tuple(l)]['value'] for l in labels]
-#     pred_list = [decoder[tuple(pred.argmax(-1))]['value'] for pred in prediction]
-#     log = classification_report(label_list, pred_list, output_dict = True)
-#     pd.DataFrame(log).T.to_csv(f'{filename}/results/classification_report.csv', sep=';')
 
 # %%
 if args_dict['task_type'] == 'dhc-hierarchical-classification' or args_dict['task_type'] == 'rnn-hierarchical-classification':

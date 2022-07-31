@@ -22,7 +22,7 @@ architecture: "roberta"
 resume_from_checkpoint: null
 # the checkpoint model to work from
 checkpoint_torch_model: False 
-checkpoint_model_or_path: "uklfr/gottbert-base"
+checkpoint_model_or_path: "benjamin/roberta-base-wechsel-german" #"uklfr/gottbert-base"
 #
 tokenizer_num_processes: 10
 # Number of Workers
@@ -32,38 +32,38 @@ load_best: True
 # is a higher value better in the metric you use?
 greater_better: True
 # metric you want to use
-metric_used: "loss" 
+metric_used: "h_f1" 
 drop_last: False
 
 #try to get batch_size as high as possible
-batch_size: 24
+batch_size: 8
 gradient_accumulation_steps: 1
 # Learning Rate, 1e-05
 lr_rate: 5e-05
 #5.0e-1 = 0.5
-weight_decay: 0.1
+weight_decay: 0.005
 # Warm up for the learning rate
-warm_up: 0.1
+warm_up: 0.2
 lr_scheduler_type: "linear"
-epochs: 5
-oversampling: 0.1
+epochs: 10
+oversampling: 0
 # Number of layers in the pretrained model to not train
-freeze_layer: 10
+freeze_layer: 8
 label_smoothing: 0
-hidden_dropout_prob: 0.2
+hidden_dropout_prob: 0.1
 attention_probs_dropout_prob: 0.2
 # Custom Trainer
 custom_trainer: None 
 # Split Ratio
-split_ratio_train: 0.7
+split_ratio_train: 0.8
 
 # Should there be a tensorboard log?
 logging: True
 logging_strategy: "steps"
 #same as evaluatian steps
-logging_steps: 100
+logging_steps: 250
 evaluation_strategy: "steps"
-evaluation_steps: 200
+evaluation_steps: 750
 save_strategy: "steps"
-save_steps: 5000
-save_limits: 3
+save_steps: 3000
+save_limits: 1

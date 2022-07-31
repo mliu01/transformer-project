@@ -7,7 +7,7 @@ from classifier_models.RNN_Hierarchical_Classification import RNNClassificationM
 def provide_model(name, pretrained_model_or_path, config=None, tree=None):
 
     if name == 'flat-classification':
-        return AutoModelForSequenceClassification.from_pretrained(pretrained_model_or_path, config=config)
+        return AutoModelForSequenceClassification.from_config(config=config)
 
     elif name == 'dhc-hierarchical-classification':
         return DHCClassificationModel(config=config, tree=tree)

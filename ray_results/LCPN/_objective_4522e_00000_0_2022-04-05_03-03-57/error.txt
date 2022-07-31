@@ -1,0 +1,62 @@
+Failure # 1 (occurred at 2022-04-05_03-04-02)
+Traceback (most recent call last):
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\trial_runner.py", line 739, in _process_trial
+    results = self.trial_executor.fetch_result(trial)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\ray_trial_executor.py", line 746, in fetch_result
+    result = ray.get(trial_future[0], timeout=DEFAULT_GET_TIMEOUT)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\_private\client_mode_hook.py", line 82, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\worker.py", line 1621, in get
+    raise value.as_instanceof_cause()
+ray.exceptions.RayTaskError(TuneError): [36mray::ImplicitFunc.train_buffered()[39m (pid=13896, ip=192.168.1.200, repr=<types.ImplicitFunc object at 0x0000022BDF653E20>)
+  File "python\ray\_raylet.pyx", line 536, in ray._raylet.execute_task
+  File "python\ray\_raylet.pyx", line 486, in ray._raylet.execute_task.function_executor
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\_private\function_manager.py", line 563, in actor_method_executor
+    return method(__ray_actor, *args, **kwargs)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\trainable.py", line 178, in train_buffered
+    result = self.train()
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\trainable.py", line 237, in train
+    result = self.step()
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\function_runner.py", line 379, in step
+    self._report_thread_runner_error(block=True)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\function_runner.py", line 526, in _report_thread_runner_error
+    raise TuneError(
+ray.tune.error.TuneError: Trial raised an exception. Traceback:
+[36mray::ImplicitFunc.train_buffered()[39m (pid=13896, ip=192.168.1.200, repr=<types.ImplicitFunc object at 0x0000022BDF653E20>)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\transformers\tokenization_utils_base.py", line 705, in convert_to_tensors
+    tensor = as_tensor(value)
+ValueError: too many dimensions 'str'
+
+During handling of the above exception, another exception occurred:
+
+[36mray::ImplicitFunc.train_buffered()[39m (pid=13896, ip=192.168.1.200, repr=<types.ImplicitFunc object at 0x0000022BDF653E20>)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\function_runner.py", line 260, in run
+    self._entrypoint()
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\function_runner.py", line 328, in entrypoint
+    return self._trainable_func(self.config, self._status_reporter,
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\function_runner.py", line 594, in _trainable_func
+    output = fn()
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\transformers\integrations.py", line 282, in dynamic_modules_import_trainable
+    return trainable(*args, **kwargs)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\ray\tune\utils\trainable.py", line 344, in inner
+    trainable(config, **fn_kwargs)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\transformers\integrations.py", line 183, in _objective
+    local_trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\transformers\trainer.py", line 1290, in train
+    for step, inputs in enumerate(epoch_iterator):
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\torch\utils\data\dataloader.py", line 521, in __next__
+    data = self._next_data()
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\torch\utils\data\dataloader.py", line 561, in _next_data
+    data = self._dataset_fetcher.fetch(index)  # may raise StopIteration
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\torch\utils\data\_utils\fetch.py", line 52, in fetch
+    return self.collate_fn(data)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\transformers\data\data_collator.py", line 221, in __call__
+    batch = self.tokenizer.pad(
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\transformers\tokenization_utils_base.py", line 2795, in pad
+    return BatchEncoding(batch_outputs, tensor_type=return_tensors)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\transformers\tokenization_utils_base.py", line 210, in __init__
+    self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
+  File "C:\Users\mandy\anaconda3\envs\gpu2\lib\site-packages\transformers\tokenization_utils_base.py", line 721, in convert_to_tensors
+    raise ValueError(
+ValueError: Unable to create tensor, you should probably activate truncation and/or padding with 'padding=True' 'truncation=True' to have batched tensors with the same length.
+

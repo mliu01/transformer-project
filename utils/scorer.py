@@ -1,9 +1,11 @@
+# %%
 from sklearn.metrics import precision_recall_fscore_support, f1_score
 import logging
 import numpy as np
 from hiclass import metrics
 
 
+# %%
 def score_traditional(gs: list, prediction: list, name='Unknown'):
     logger = logging.getLogger(__name__)
     logger.debug(gs)
@@ -20,6 +22,7 @@ def score_traditional(gs: list, prediction: list, name='Unknown'):
     return [w_prec, w_rec, w_f1, f1_macro]  # Precision_weighted, Recall_weighted, F1_weighted, F1_macro
 
 
+# %%
 def score_mwpd(gs: list, prediction: list):
     logger = logging.getLogger(__name__)
     logger.debug(gs)
@@ -29,7 +32,9 @@ def score_mwpd(gs: list, prediction: list):
     return {'weighted': weighted_scores, 'macro': macro_scores}
 
 
+# %%
 
+# %%
 def hierarchical_score(y_true, y_pred):
     # transpose labels and predictions, has to be in shape (n_samples, n_levels)
     y_true_ = np.array(y_true).transpose()
@@ -42,6 +47,7 @@ def hierarchical_score(y_true, y_pred):
     return h_prec, h_recall, h_f1
 
 
+# %%
 class HierarchicalScorer:
     def __init__(self, experiment_name, tree=None, transformer_decoder=None):
         self.logger = logging.getLogger(__name__)
@@ -53,6 +59,7 @@ class HierarchicalScorer:
         if tree:
             self.root = [node[0] for node in self.tree.in_degree if node[1] == 0][0]
 
+# %%
 # functions for flat 
     def determine_path_to_root(self, nodes):
         predecessors = [k for k in self.tree.predecessors(nodes[-1])]
@@ -107,8 +114,6 @@ class HierarchicalScorer:
             level -= 1
         return successors
 
-
-
     def compute_metrics_transformers_lcpn(self, pred):
         raw_labels = pred.label_ids
         raw_preds = pred.predictions.argmax(-1)
@@ -126,6 +131,24 @@ class HierarchicalScorer:
         labels_per_lvl, preds_per_lvl = self.determine_label_preds_per_lvl(pp_labels, pp_preds)
 
         return self.compute_metrics(labels_per_lvl, preds_per_lvl)
+
+#     def compute_metrics_transformers_lcpn(self, pred):
+#         raw_labels = pred.label_ids
+#         raw_preds = pred.predictions.argmax(-1)
+
+#         labels = [self.transformer_decoder([label])[0] for label in raw_labels]
+#         preds = [self.transformer_decoder([pred])[0] for pred in raw_preds]
+
+#         decoder = dict(self.tree.nodes(data="name"))
+#         encoder = dict([(value, key) for key, value in decoder.items()])
+
+#         # Encoder values to compute metrics
+#         pp_labels = [encoder[label] for label in labels]
+#         pp_preds = [encoder[pred] for pred in preds]
+
+#         labels_per_lvl, preds_per_lvl = self.determine_label_preds_per_lvl(pp_labels, pp_preds)
+
+#         return self.compute_metrics(labels_per_lvl, preds_per_lvl)
 
 
     def compute_metrics_transformers_dhc(self, pred):

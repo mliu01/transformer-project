@@ -1,4 +1,5 @@
 import torch
+from sklearn.preprocessing import OneHotEncoder
 
 class CategoryDataset(torch.utils.data.Dataset):
     def __init__(self, ds, encoder):

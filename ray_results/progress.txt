@@ -1,0 +1,66 @@
+batch size:
+64 at 12 frozen layers (best hf1: ~30%)
+at 11 frozen layers
+16 at 10 frozen layers (best: roberta-hierarchical_freeze-10_E50_B16_LR3e-04_WD0.5_V001 hf1: 41% epochs: 30-35)
+(roberta-hierarchical_freeze-10_E50_B16_LR1e-04_WD0.5_V001 hf1: 46% epochs: 40-45, doesnt really get better after the 41 epoch)
+
+higher learning rate prolly, 3e-05 is too low, even at epoch 25 it gives worse results than epoch 15 1e-04
+
+clean up code
+
+ #logits = [torch.relu(self.nodes[i][path[i]](input)) for i in range(lvl)]
+
+# from torch_lr_finder import LRFinder, TrainDataLoaderIter
+# import torch.nn as nn
+# class CustomTrainIter(TrainDataLoaderIter):
+#     def inputs_labels_from_batch(self, batch_data):
+#         return [batch_data], batch_data['labels']
+
+# f_train = CustomTrainIter(trainer.get_train_dataloader())
+# model = model_obj.model
+# criterion = nn.CrossEntropyLoss()
+# optimizer = trainer.create_optimizer() #optim.Adam(model.parameters(), lr=0.1, weight_decay=1e-2)
+# lr_finder = LRFinder(model, optimizer, criterion, device="cuda")
+# lr_finder.range_test(f_train , end_lr=10e-4, num_iter=100, step_mode="exp")
+# lr_finder.plot(log_lr=False)
+# lr_finder.reset()
+
+
+# i = input_ids
+# input_ids = i[0]['input_ids']
+# attention_mask = i[0]['attention_mask']
+# labels = i[0]['labels']
+
+#torch.cuda.FloatTensor(logits)
+
+top 3: train_check[(train_check['label']=='Literatur & Unterhaltung') | (train_check['label']=='Sachbuch') | (train_check['label']=='Kinderbuch & Jugendbuch')].to_json('../data/blurbs3_train'+".json", orient = "records", lines=True, force_ascii=False)
+
+
+flat nur auf lvl1 ebene (f1 weighted)
+vergleich hierarchical f1 weighted average lvl1 
+
+
+einzelnd auf die level flat classification trainieren
+
+
+
+
+- ohne gefreezte layer testen (hierarchical training gpu)
+- roberta auf bert (pretrained), debuggen freeze und bert (privat), metrics vom aktuellsten bert (björn)
+
+- classification report für jede kategorie/pfad
+
+
+Flat Classification (new) läuft!!
+base flat läuft!! (und trainiert!!, s. base_None_E20_B8_LR5e-05_WD2_V001)
+
+ToDo:
+- hierarchical lcpn
+- compare if flat base and new flat give similar results or not
+- clean up code -> readability!!! (an björns code orientieren)
+- s. marked todo's in code
+
+
+
+
+

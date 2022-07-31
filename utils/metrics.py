@@ -19,7 +19,7 @@ class Metrics():
     """
     Class structure brings benefit of being able to pass the label names
     """
-    def __init__(self, label_names: List[str], run:object = None) -> None:
+    def __init__(self, run:object = None) -> None:
         """
         Takes the list of label names (care for alphabetical order behaviour) and optionally a run reference for using neptune.ai
         """
@@ -28,8 +28,8 @@ class Metrics():
         self.precision = load_metric("precision")
         self.recall = load_metric("recall")
         self.matthews_correlation = load_metric("matthews_correlation")
-        self.class_scores = MultiClassScores()
-        self.class_scores.get_names(label_names)
+        #self.class_scores = MultiClassScores()
+        #self.class_scores.get_names(label_names)
         
         if run:
             self.run = run
@@ -63,11 +63,11 @@ class Metrics():
             self.matthews_correlation.compute(
                 predictions=predictions, references=labels)
         )
-        metrics.update(
-            self.class_scores.compute(
-                predictions=predictions, references=labels#, label_names=target_names
-            )
-        )
+        # metrics.update(
+        #     self.class_scores.compute(
+        #         predictions=predictions, references=labels#, label_names=target_names
+        #     )
+        # )
 
         if self.use_netune:
             for key, value in metrics.items():
